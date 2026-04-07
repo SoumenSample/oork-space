@@ -1,0 +1,186 @@
+.editor-box {
+  /* border: 1px solid #ddd; */
+  padding: 16px;
+  border-radius: 10px;
+  min-height: 100px;
+  border: 1px solid #e5e7eb;
+  background: #fbfcfd;
+}
+
+.ce-header {
+  font-weight: 700 !important;
+  font-size:28px;
+}
+
+.ce-header[data-level="1"] {
+  font-size: 28px;
+  font-weight: 700 !important;
+}
+
+.ce-header[data-level="2"] {
+  font-size: 24px;
+  font-weight: 700 !important;
+}
+
+.ce-header[data-level="3"] {
+  font-size: 20px;
+  font-weight: 700 !important;
+}
+
+.ce-header[data-level="4"] {
+  font-size: 18px;
+  font-weight: 700 !important;
+}
+
+.ce-header[data-level="5"] {
+  font-size: 16px;
+  font-weight: 700 !important;
+}
+
+.ce-header[data-level="6"] {
+  font-size: 14px;
+  font-weight: 700 !important;
+}
+
+.ce-paragraph {
+  font-size: 14px;
+}
+
+/* Limit width like Notion */
+/* .ce-block__content {
+  max-width: 800px;
+} */
+
+/* Table styling */
+.cdx-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Table cells */
+.cdx-table td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  min-width: 100px;
+  transition: 0.2s;
+}
+
+/* Focus effect (Notion-like) */
+.cdx-table td:focus {
+  outline: 2px solid #4f46e5;
+  background: #eef2ff;
+}
+
+/* Hover */
+.cdx-table td:hover {
+  background: #f9fafb;
+}
+/* Main editor spacing */
+.ce-block__content {
+  max-width: 800px;
+  margin-left: 60px;
+}
+
+/* Toolbar button alignment */
+.ce-toolbar__content {
+  margin-left: 40px;
+}
+
+/* Optional: cleaner look */
+.ce-block {
+  padding: 6px 0;
+}
+/* Divider */
+.ce-delimiter {
+  margin: 20px 0;
+}
+
+/* Quote */
+.cdx-quote {
+  border-left: 4px solid #4f46e5;
+  padding-left: 12px;
+  color: #374151;
+  font-style: italic;
+}
+
+/* Page Link */
+.page-link input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+/* Callout */
+.callout {
+  border-left: 4px solid #facc15;
+  background: #fefce8;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+/* Toggle */
+details {
+  margin: 10px 0;
+  cursor: pointer;
+}
+
+/* Page Link */
+.page-link input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+}
+.preview-modal {
+  position: absolute;
+  background: white;
+  border: 1px solid #ddd;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  z-index: 999;
+  width: 200px;
+  display: none;
+}
+
+/* Page link hover effect */
+.page-link-text {
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.page-link-text:hover {
+  text-decoration: underline;
+}
+.notion-tooltip {
+  background: #1f1f1f;
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 8px;
+  width: 220px;
+  font-size: 13px;
+  z-index: 999;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  animation: fadeIn 0.15s ease-in-out;
+}
+
+.tooltip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.tooltip-desc {
+  font-size: 12px;
+  color: #bbb;
+}
+
+/* Smooth animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
