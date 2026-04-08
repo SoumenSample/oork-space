@@ -16,6 +16,11 @@ import {
   Database, Table, Layout as LayoutIcon, CheckSquare,
   Film, BarChart2, FileCode, Link2, Globe, Presentation,
   Folder,
+  PresentationIcon,
+  AppWindow,
+  Clapperboard,
+  Video,
+  ImagePlus,
 } from "lucide-react";
 import logo from "../public/uploads/OORK_SPACE_Logos-removebg-preview.png";
 import Image from "next/image";
@@ -591,10 +596,10 @@ export default function Sidebar({ view, setView }: SidebarProps) {
     { key: "dashboard",     label: "Dashboard",     path: "/",              icon: <LayoutGrid size={open?20:22}/> },
     { key: "project-board", label: "Project Board", path: "/project-board", icon: <Folder size={open?22:24}/> },
     // { key: "docs", label: "Docs", path: docsPath, icon: <FileText size={open?20:22}/> },
-    {key: "whiteboard", label:"Whiteboard", path:"/whiteboard", icon: <Folder size={open?22:24}/> },
-    {key: "presentation", label:"Presentation", path:"/presentation", icon: <Folder size={open?22:24}/> },
-    {key: "video-editing", label:"VideoEditing", path:"/video-editing", icon: <Folder size={open?22:24}/> },
-    {key: "social-media", label:"SocialMedia", path:"/socialmedia", icon: <Folder size={open?22:24}/> },
+    {key: "whiteboard", label:"Whiteboard", path:"/whiteboard", icon: <AppWindow size={open?22:24}/> },
+    {key: "presentation", label:"Presentation", path:"/presentation", icon: <PresentationIcon size={open?22:24}/> },
+    {key: "video-editing", label:"VideoEditing", path:"/video-editing", icon: <Clapperboard size={open?22:24}/> },
+    {key: "social-media", label:"SocialMedia", path:"/socialmedia", icon: <ImagePlus size={open?22:24}/> },
 
     { key: "task-board",    label: "Task Board",    path: "/task-board",    icon: <FileText   size={open?20:22}/> },
     { key: "schedule",      label: "Schedule",      path: "/schedule",      icon: <Calendar   size={open?20:22}/> },

@@ -5,10 +5,10 @@ import { useWorkspaceStore, ViewType } from "@/app/store/WorkspaceStore";
 import { X } from "lucide-react";
 
 const OPTIONS: { type: ViewType; title: string; desc: string; icon: string }[] = [
-  { type:"timeline",      title:"Timeline",      desc:"Plan by dates",          icon:"🗓"  },
-  { type:"table",         title:"Table",         desc:"Rows & properties",      icon:"📊"  },
-  { type:"board",         title:"Board",         desc:"Kanban workflow",        icon:"🧩"  },
-  { type:"gallery",       title:"Gallery",       desc:"Cards layout",           icon:"🖼"  },
+  // { type:"timeline",      title:"Timeline",      desc:"Plan by dates",          icon:"🗓"  },
+  // { type:"table",         title:"Table",         desc:"Rows & properties",      icon:"📊"  },
+  // { type:"board",         title:"Board",         desc:"Kanban workflow",        icon:"🧩"  },
+  // { type:"gallery",       title:"Gallery",       desc:"Cards layout",           icon:"🖼"  },
   { type:"editor",          title:"Editor",          desc:"Task list",              icon:"✅"  },
  
   { type:"documentation", title:"Documentation", desc:"Rich document editor",   icon:"🧾"  },
@@ -17,10 +17,10 @@ const OPTIONS: { type: ViewType; title: string; desc: string; icon: string }[] =
 ];
 
 const TEMPLATES: Record<string, { id: number; name: string; desc: string }[]> = {
-  table:         [{ id:1,name:"Blank Table",       desc:"Start from scratch" },{ id:2,name:"Project Tracker",  desc:"Track project status" },{ id:3,name:"Budget Tracking",desc:"Monitor expenses" }],
-  board:         [{ id:1,name:"Blank Board",        desc:"Start from scratch" },{ id:2,name:"Sprint Planning",  desc:"Organize sprint tasks" },{ id:3,name:"Content Calendar",desc:"Plan content" }],
-  timeline:      [{ id:1,name:"Blank Timeline",     desc:"Start from scratch" },{ id:2,name:"Project Timeline", desc:"Gantt chart planning" },{ id:3,name:"Product Roadmap",desc:"Product development" }],
-  gallery:       [{ id:1,name:"Blank Gallery",      desc:"Start from scratch" },{ id:2,name:"Design Portfolio",desc:"Showcase designs" },{ id:3,name:"Product Catalog", desc:"Display products" }],
+  // table:         [{ id:1,name:"Blank Table",       desc:"Start from scratch" },{ id:2,name:"Project Tracker",  desc:"Track project status" },{ id:3,name:"Budget Tracking",desc:"Monitor expenses" }],
+  // board:         [{ id:1,name:"Blank Board",        desc:"Start from scratch" },{ id:2,name:"Sprint Planning",  desc:"Organize sprint tasks" },{ id:3,name:"Content Calendar",desc:"Plan content" }],
+  // timeline:      [{ id:1,name:"Blank Timeline",     desc:"Start from scratch" },{ id:2,name:"Project Timeline", desc:"Gantt chart planning" },{ id:3,name:"Product Roadmap",desc:"Product development" }],
+  // gallery:       [{ id:1,name:"Blank Gallery",      desc:"Start from scratch" },{ id:2,name:"Design Portfolio",desc:"Showcase designs" },{ id:3,name:"Product Catalog", desc:"Display products" }],
   editor:          [{ id:1,name:"Blank Editor",         desc:"Start from scratch" },{ id:2,name:"Daily Tasks",     desc:"Organize daily work" },{ id:3,name:"Checklist",      desc:"Simple checklist" }],
  
   documentation: [{ id:1,name:"Blank Document",     desc:"Start with a clean slate" },{ id:2,name:"Resume / CV",desc:"Professional resume template" },{ id:3,name:"Report",desc:"Formal report with sections" }],
@@ -47,7 +47,7 @@ export default function ViewPickerCard({
 }: {
   projectId: string; insertAfterDatabaseId?: string | null; onDone: (createdDbId?: string) => void; isDark?: boolean;
 }) {
-  const [selectedCategory, setSelectedCategory] = useState<ViewType>("table");
+  const [selectedCategory, setSelectedCategory] = useState<ViewType>("editor");
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const { fetchDatabases, setActiveDatabase } = useWorkspaceStore();
@@ -103,11 +103,11 @@ export default function ViewPickerCard({
         <div className="flex flex-1 overflow-hidden">
           <div className={`hidden md:block w-48 lg:w-64 border-r overflow-y-auto ${isDark?"bg-gray-800 border-gray-700":"bg-gray-50 border-gray-200"}`}>
             <div className="p-3 lg:p-4 space-y-4 lg:space-y-5">
-              <SidebarSection title="Dataset" isDark={isDark}>
+              {/* <SidebarSection title="Dataset" isDark={isDark}>
                 {OPTIONS.filter(o=>["table","board","timeline","gallery"].includes(o.type)).map(o=>(
                   <SidebarButton key={o.type} option={o} isActive={selectedCategory===o.type} isDark={isDark} onClick={()=>setSelectedCategory(o.type)}/>
                 ))}
-              </SidebarSection>
+              </SidebarSection> */}
               {/* <SidebarSection title="Media & Collaboration" isDark={isDark}>
                 {OPTIONS.filter(o=>["presentation"].includes(o.type)).map(o=>(
                   <SidebarButton key={o.type} option={o} isActive={selectedCategory===o.type} isDark={isDark} onClick={()=>setSelectedCategory(o.type)}/>
