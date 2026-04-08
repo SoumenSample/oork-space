@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import TimelineItemModal from "@/components/TimelineItemmodal";
 import type { DbView } from "@/components/DatabaseViewtabs";
@@ -44,7 +43,12 @@ export default function TimelineView({ databaseId,activeView }: { databaseId: st
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  const router = useRouter();
+  const navigateToSchedule = () => {
+    if (typeof window === "undefined") return;
+    const nextUrl = `/schedule?databaseId=${encodeURIComponent(databaseId)}`;
+    window.location.assign(nextUrl);
+  };
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
@@ -483,7 +487,7 @@ export default function TimelineView({ databaseId,activeView }: { databaseId: st
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full lg:w-auto text-xs sm:text-sm">
             <button
-              onClick={() => router.push(`/schedule?databaseId=${databaseId}`)}
+              onClick={navigateToSchedule}
               className={`px-3 py-2 rounded-lg border font-semibold whitespace-nowrap touch-manipulation ${isDark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
             >
               Manage in Calendar

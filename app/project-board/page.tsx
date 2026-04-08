@@ -152,6 +152,13 @@ export default function ProjectsBoardPage() {
         ? "text-gray-600 hover:text-red-400 hover:bg-red-400/10"
         : "text-gray-400 hover:text-red-500 hover:bg-red-50"
     }`;
+     const filteredDbs = tabs.filter(
+  (db) =>
+    db.viewType !== "socialmedia" &&
+    db.viewType !== "video" &&
+    db.viewType !== "whiteboard" &&
+    db.viewType !== "presentation"
+);
 
   return (
     <div className={`min-h-screen ${isDark ? "bg-gray-800" : "bg-white"}`}>
@@ -255,7 +262,7 @@ export default function ProjectsBoardPage() {
 
               {/* database grid */}
               <div className="p-2 sm:p-3 md:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 md:gap-4 overflow-y-auto flex-1">
-                {tabs.map((db) => (
+                {filteredDbs.map((db) => (
                   <div key={db._id} className="relative group/db h-fit">
                     {/* database card */}
                     <button

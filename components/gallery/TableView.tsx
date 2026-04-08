@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import type { DbView } from "@/components/DatabaseViewtabs";
 import { useYjsTable } from "@/components/YjsProvider";
-import { useAuth } from "@/components/AuthContext";
+import { useOptionalAuth } from "@/components/AuthContext";
 
 import AddPropertyModal from "./AddPropertyModal";
 import TableHeaderCell from "./TableHeadercell";
@@ -52,7 +52,8 @@ export default function TableView({
   const { resolvedTheme } = useTheme();
   const isDark = isDarkProp ?? resolvedTheme === "dark";
   const roomName = `${databaseId}-${activeView?.type ?? "all-items"}`;
-  const { user } = useAuth();
+  const auth = useOptionalAuth();
+  const user = auth?.user ?? null;
 
   const {
     yjsInitialized,

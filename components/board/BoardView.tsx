@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { Calendar as CalendarIcon, MoreHorizontal, Plus } from "lucide-react";
 import type { DbView } from "@/components/DatabaseViewtabs";
-import { useAuth } from "@/components/AuthContext";
+import { useOptionalAuth } from "@/components/AuthContext";
 import {
   DndContext,
   closestCorners,
@@ -623,7 +623,8 @@ export default function BoardView({
   activeView?: DbView;
 }) {
   const { resolvedTheme } = useTheme();
-  const { user } = useAuth();
+  const auth = useOptionalAuth();
+  const user = auth?.user ?? null;
   const loggedInEmail = user?.email || "";
   const isDark = resolvedTheme === "dark";
 

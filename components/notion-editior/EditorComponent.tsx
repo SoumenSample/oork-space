@@ -12,6 +12,9 @@ import Quote from "@editorjs/quote";
 import CalloutTool from "./CallutTools";
 import ToggleTool from "./ToggleTolls";
 import PageLinkTool from "./pageLink";
+import TimelineBlockTool from "./TimelineBlockTool";
+import BoardBlockTool from "./BoardBlockTool";
+import TableBlockTool from "./TableBlockTool";
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import textPreview from "../../public/0Jl54.png";
@@ -164,6 +167,24 @@ export default function EditorComponent({ initialData, docId, databaseId }: Edit
         callout: CalloutTool,
         toggle: ToggleTool,
         pagelink: PageLinkTool,
+        board: {
+          class: BoardBlockTool as unknown as ToolConstructable,
+          config: {
+            databaseId: databaseId ?? currentDocId ?? "",
+          },
+        },
+        tableview: {
+          class: TableBlockTool as unknown as ToolConstructable,
+          config: {
+            databaseId: databaseId ?? currentDocId ?? "",
+          },
+        },
+        timeline: {
+          class: TimelineBlockTool as unknown as ToolConstructable,
+          config: {
+            databaseId: databaseId ?? currentDocId ?? "",
+          },
+        },
       },
       onChange: () => {
         handleAutoSave();
@@ -221,6 +242,10 @@ export default function EditorComponent({ initialData, docId, databaseId }: Edit
         title = "Page Link";
         description = "Link this block to another page or resource.";
         url = linkPreview;
+      } else if (rawText.includes("table view")) {
+        title = "Table View";
+        description = "Insert a full table section in this editor page.";
+        url = textPreview;
       } else if (rawText.includes("table")) {
         title = "Table";
         description = "Add a table to organize your data.";
@@ -244,6 +269,14 @@ export default function EditorComponent({ initialData, docId, databaseId }: Edit
       } else if (rawText.includes("callout")) {
         title = "Callout";
         description = "Add a callout block to your page.";
+        url = textPreview;
+      } else if (rawText.includes("timeline")) {
+        title = "Timeline";
+        description = "Insert a full timeline section in this editor page.";
+        url = textPreview;
+      } else if (rawText.includes("board")) {
+        title = "Board";
+        description = "Insert a full board section in this editor page.";
         url = textPreview;
       } else {
         hidePreview();

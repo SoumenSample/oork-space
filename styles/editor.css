@@ -1,5 +1,6 @@
 .editor-box {
   /* border: 1px solid #ddd; */
+  width:100%;
   padding: 16px;
   border-radius: 10px;
   min-height: 100px;
@@ -89,6 +90,7 @@
 /* Optional: cleaner look */
 .ce-block {
   padding: 6px 0;
+  /* width:140rem/; */
 }
 /* Divider */
 .ce-delimiter {
