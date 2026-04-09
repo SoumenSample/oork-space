@@ -8,6 +8,7 @@ import { SpinnerFullscreen } from "@/components/ui/spinner";
 import VideoView from "@/components/video/VideoView";
 import ShareButton from "@/components/ShareButton";
 import { useWorkspaceStore } from "@/app/store/WorkspaceStore";
+import { SiteHeader } from "@/components/site-header";
 
 type VideoRecord = {
   _id: string;
@@ -154,7 +155,8 @@ export default function VideoEditingPage() {
 
   if (selectedVideo) {
     return (
-      <div className={`min-h-screen ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+      <div className={`min-h-screen  rounded-2xl border border-gray-300 ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+        <SiteHeader/>
         <div className="border-b border-white/10 bg-linear-to-r from-blue-600 via-cyan-600 to-teal-600 px-4 py-3 shadow-lg shadow-black/10">
           <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -197,7 +199,8 @@ export default function VideoEditingPage() {
   const projectOptions = projects.length > 0 ? projects : [];
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+    <div className={`min-h-screen  rounded-2xl border border-gray-300 ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+      <SiteHeader/>
       <div className="relative overflow-hidden border-b border-white/10 bg-linear-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-10 text-white">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-30">
           <div className="absolute left-[8%] top-[8%] h-72 w-72 rounded-full bg-cyan-400/30 blur-3xl" />

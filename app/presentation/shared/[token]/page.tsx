@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { ArrowLeft, Eye, Edit, Lock } from "lucide-react";
 import { SpinnerFullscreen } from "@/components/ui/spinner";
 import PresentationView from "@/components/presentation/PresentationView";
+import { SiteHeader } from "@/components/site-header";
 
 type SharedPresentationResponse = {
   error?: string;
@@ -143,7 +144,8 @@ export default function SharedPresentationPage() {
   }
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+    <div className={`min-h-screen rounded-2xl border border-gray-300 ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+      <SiteHeader/>
       <div className="border-b border-white/10 bg-linear-to-r from-violet-600 via-indigo-600 to-fuchsia-600 px-4 py-3 shadow-lg shadow-black/10">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
           <button
