@@ -109,7 +109,7 @@ function DraggableDatabaseSection({
       onDragOver={dragEnabled  ? (e) => e.preventDefault() : undefined}
       onDrop={dragEnabled      ? () => onDropOn(db._id) : undefined}
       id={`db-section-${db._id}`}
-      className={`relative ${isDark ? "bg-slate-850" : "bg-white"} transition-all overflow-hidden max-h-[700px] flex flex-col ${
+      className={`relative bg-background text-foreground ${isDark ? "bg-zinc-900" : "bg-zinc-100"} transition-all overflow-hidden max-h-[700px] flex flex-col ${
         isDragging && dragEnabled ? "opacity-60" : ""
       }`}
     >

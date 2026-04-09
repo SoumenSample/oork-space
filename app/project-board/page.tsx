@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { useWorkspaceStore } from "@/app/store/WorkspaceStore";
 import { Trash2, X } from "lucide-react";
 
+
 /* ── Confirm Delete Modal ── */
 function ConfirmDeleteModal({
   open,
@@ -161,7 +162,7 @@ export default function ProjectsBoardPage() {
 );
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-gray-800" : "bg-white"}`}>
+    <div className={`min-h-screen ${isDark ? "bg-zinc-900 text-gray-300" : "bg-zinc-100 text-gray-900"}`}>
       {/* Confirm delete modal */}
       <ConfirmDeleteModal
         open={confirmDelete.open}
@@ -187,7 +188,7 @@ export default function ProjectsBoardPage() {
 
           {/* ══════ LEFT: PROJECT LIST ══════ */}
           <div className="md:col-span-4 lg:col-span-3">
-            <div className={`rounded-xl sm:rounded-2xl border overflow-hidden shadow-sm ${isDark ? "bg-[#1F2125] border-gray-800" : "bg-white border-gray-200"}`}>
+            <div className={`rounded-xl sm:rounded-2xl border overflow-hidden shadow-sm ${isDark ? "bg-transparent border-gray-800" : "bg-transparent border-gray-200"}`}>
 
               {/* header */}
               <div className={`px-3 sm:px-4 py-2 sm:py-3 font-semibold text-xs sm:text-sm border-b ${isDark ? "bg-[#1e1f23] border-gray-800 text-gray-100" : "bg-rose-50 border-rose-100 text-gray-900"}`}>
@@ -205,7 +206,7 @@ export default function ProjectsBoardPage() {
                       {/* project button */}
                       <button
                         onClick={() => setActiveProjectId(p._id)}
-                        className={`flex-1 min-w-0 text-left px-3 py-2.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all touch-manipulation font-medium ${
+                        className={`flex-1 min-w-0 text-left px-3 bg-card text-card-foreground py-2.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all touch-manipulation font-medium ${
                           active
                             ? "bg-gradient-to-r from-teal-600 to-rose-600 text-white shadow-md"
                             : isDark
@@ -243,7 +244,7 @@ export default function ProjectsBoardPage() {
 
           {/* ══════ RIGHT: DATABASE TABS ══════ */}
           <div className="md:col-span-8 lg:col-span-9">
-            <div className={`rounded-xl sm:rounded-2xl border overflow-hidden flex flex-col max-h-[600px] sm:max-h-[700px] md:h-[calc(100vh-180px)] shadow-sm ${isDark ? "bg-[#18191d] border-gray-800" : "bg-white border-gray-200"}`}>
+            <div className={`rounded-xl sm:rounded-2xl border overflow-hidden flex flex-col max-h-[600px] sm:max-h-[700px] md:h-[calc(100vh-180px)] shadow-sm ${isDark ? "bg-transparent border-gray-800" : "bg-transparent border-gray-200"}`}>
 
               {/* header */}
               <div className={`px-3 sm:px-4 py-2.5 sm:py-3 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shrink-0 ${isDark ? "bg-[#1e1f23] border-gray-800" : "bg-rose-50 border-rose-100"}`}>

@@ -211,9 +211,9 @@ const emojiPickerRef = useRef<HTMLDivElement>(null);
     : "text-gray-600 hover:bg-gray-100 hover:text-gray-800";
 
   /* ── Sticky wrapper bg ── */
-  const stickyBg = isDark
-    ? "bg-[#111827] border-gray-700/60"
-    : "bg-white border-gray-200";
+  // const stickyBg = isDark
+  //   ? "bg-zinc-900 border-gray-700/60"
+  //   : "bg-zinc-100 border-gray-200";
 
   const visibleViews = views.slice(0, MAX_VISIBLE);
   const hiddenViews  = views.slice(MAX_VISIBLE);
@@ -253,7 +253,7 @@ const handleDeleteDatabase = async () => {
       │  z-20 keeps it above the content rows but below modals. │
       └─────────────────────────────────────────────────────────┘
     */
-    <div className={`sticky top-0 z-20 border-b ${stickyBg} rounded-t-xl ${isDark ? "bg-slate-800" : ""}`}>
+    <div className={`sticky top-0 z-20 border-b rounded-t-xl ${isDark ? "bg-zinc-900" : "bg-zinc-100"}`}>
 
       {/* ══ ROW 1: DB icon + name ══════════════════════════════ */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-2 relative">

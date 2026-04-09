@@ -458,6 +458,20 @@ export default function Sidebar({ view, setView }: SidebarProps) {
 
   useEffect(() => { setMounted(true); }, []);
 
+  useEffect(() => {
+    const handleToggleSidebar = () => {
+      if (window.innerWidth < 1024) {
+        setMobileOpen((value) => !value);
+        return;
+      }
+
+      setOpen((value) => !value);
+    };
+
+    window.addEventListener("oork-toggle-sidebar", handleToggleSidebar);
+    return () => window.removeEventListener("oork-toggle-sidebar", handleToggleSidebar);
+  }, []);
+
   const fetchProjects = useCallback(async () => {
     try {
       const data = await (await fetch("/api/projects")).json();
@@ -797,16 +811,16 @@ export default function Sidebar({ view, setView }: SidebarProps) {
       </div>
 
       {/* Collapse button */}
-      <motion.button layout onClick={()=>setOpen((v)=>!v)}
-        className={`hidden lg:flex fixed bottom-0 left-0 border-t z-50 ${isDark?"border-gray-800 bg-[#0F1014] hover:bg-[#1a1b1e]":"border-rose-200 bg-rose-50 hover:bg-rose-100"}`}
+      {/* <motion.button layout onClick={()=>setOpen((v)=>!v)}
+        className={`hidden lg:flex  bottom-0 left-0 border-t z-50 ${isDark?"border-gray-800 bg-[#0F1014] hover:bg-[#1a1b1e]":"border-rose-200 bg-rose-50 hover:bg-rose-100"}`}
         style={{ width:open?"300px":"80px" }}>
-        <div className={`flex items-center ${open?"justify-start px-4":"justify-center"} p-2`}>
+        <div className={`flex items-center ${open?"justify-end px-4":"justify-center"} p-2`}>
           <motion.div layout className={`grid ${open?"size-10":"size-8"} place-content-center`}>
             <FiChevronsRight className={`${!open&&"rotate-180"} ${isDark?"text-gray-400":"text-gray-600"}`} size={open?20:18}/>
           </motion.div>
           {open&&<motion.span layout className="text-xs font-medium">Hide</motion.span>}
         </div>
-      </motion.button>
+      </motion.button> */}
     </>
   );
 

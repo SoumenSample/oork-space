@@ -15,6 +15,8 @@ import PageLinkTool from "./pageLink";
 import TimelineBlockTool from "./TimelineBlockTool";
 import BoardBlockTool from "./BoardBlockTool";
 import TableBlockTool from "./TableBlockTool";
+import ChartBlockTool from "./ChartBlockTool";
+import DocumentBlockTool from "./DocumentBlockTool";
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import textPreview from "../../public/0Jl54.png";
@@ -34,9 +36,10 @@ type EditorComponentProps = {
   initialData?: unknown;
   docId?: string;
   databaseId?: string;
+  projectId?: string;
 };
 
-export default function EditorComponent({ initialData, docId, databaseId }: EditorComponentProps) {
+export default function EditorComponent({ initialData, docId, databaseId, projectId }: EditorComponentProps) {
   const editorRef = useRef<EditorJS | null>(null);
   const initialDataRef = useRef<OutputData | undefined>(initialData as OutputData | undefined);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,6 +188,20 @@ export default function EditorComponent({ initialData, docId, databaseId }: Edit
             databaseId: databaseId ?? currentDocId ?? "",
           },
         },
+        chart: {
+          class: ChartBlockTool as unknown as ToolConstructable,
+          config: {
+            databaseId: databaseId ?? currentDocId ?? "",
+            projectId,
+          },
+        },
+        document: {
+          class: DocumentBlockTool as unknown as ToolConstructable,
+          config: {
+            databaseId: databaseId ?? currentDocId ?? "",
+            templateName: "blank",
+          },
+        },
       },
       onChange: () => {
         handleAutoSave();
@@ -277,6 +294,14 @@ export default function EditorComponent({ initialData, docId, databaseId }: Edit
       } else if (rawText.includes("board")) {
         title = "Board";
         description = "Insert a full board section in this editor page.";
+        url = textPreview;
+      } else if (rawText.includes("document")) {
+        title = "Document";
+        description = "Insert a full document section in this editor page.";
+        url = textPreview;
+      } else if (rawText.includes("chart")) {
+        title = "Chart";
+        description = "Insert a full chart section in this editor page.";
         url = textPreview;
       } else {
         hidePreview();

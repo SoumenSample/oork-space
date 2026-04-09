@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo, use } from "react";
 import {
@@ -10,7 +10,7 @@ import {
 import { Download, Upload, Plus, Trash2, RefreshCw, Link2, Database, X, FileSpreadsheet } from "lucide-react";
 import type { DbView } from "@/components/DatabaseViewtabs";
 import { exportChart } from "@/lib/exportChart";
-// ── Types ──────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Types ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 type ChartType = "bar" | "line" | "pie" | "area" | "scatter" | "column" | "bubble";
 type DataSource = "manual" | "import" | "table";
 
@@ -41,7 +41,7 @@ interface LinkedDB {
   viewType: string;
 }
 
-// ── Default data per template ──────────────────────────────────────
+// ΓöÇΓöÇ Default data per template ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const TEMPLATE_DATA: Record<ChartType, { columns: string[]; rows: (string | number)[][] }> = {
   bar: {
     columns: ["Product", "Q1", "Q2", "Q3", "Q4"],
@@ -84,16 +84,16 @@ const PRESET_PALETTES = [
 ];
 
 const CHART_TYPES: { type: ChartType; label: string; icon: string }[] = [
-  { type: "bar",     label: "Bar",     icon: "📊" },
-  { type: "column",  label: "Column",  icon: "📊" },
-  { type: "line",    label: "Line",    icon: "📈" },
-  { type: "area",    label: "Area",    icon: "📉" },
-  { type: "pie",     label: "Pie",     icon: "🥧" },
-  { type: "scatter", label: "Scatter", icon: "🔵" },
-  { type: "bubble",  label: "Bubble",  icon: "🌐" },
+  { type: "bar",     label: "Bar",     icon: "≡ƒôè" },
+  { type: "column",  label: "Column",  icon: "≡ƒôè" },
+  { type: "line",    label: "Line",    icon: "≡ƒôê" },
+  { type: "area",    label: "Area",    icon: "≡ƒôë" },
+  { type: "pie",     label: "Pie",     icon: "≡ƒÑº" },
+  { type: "scatter", label: "Scatter", icon: "≡ƒö╡" },
+  { type: "bubble",  label: "Bubble",  icon: "≡ƒîÉ" },
 ];
 
-// ── Component ──────────────────────────────────────────────────────
+// ΓöÇΓöÇ Component ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export default function ChartView({
   databaseId, projectId, templateName = "column", activeView,
 }: {
@@ -119,7 +119,7 @@ export default function ChartView({
     showDots: true,
     strokeWidth: 2,
     borderRadius: 2,
-    // ✅ FIX: changed default from pure "#111827" to transparent so chart area
+    // Γ£à FIX: changed default from pure "#111827" to transparent so chart area
     //    doesn't look like a solid black void when the component first mounts.
     bgColor: "#0f172a",
   });
@@ -141,9 +141,9 @@ export default function ChartView({
   const isInputActive = modeKey.includes("input") || modeKey.includes("by-status");
 
   const isShowData = modeKey.includes("show-data") || modeKey.includes("my-tasks");
-  // ✅ FIX: track the measured pixel height of the chart wrapper so
+  // Γ£à FIX: track the measured pixel height of the chart wrapper so
   //    ResponsiveContainer always gets an explicit numeric height instead of
-  //    "100%" — this prevents Recharts SVG from escaping its clipping rect.
+  //    "100%" ΓÇö this prevents Recharts SVG from escaping its clipping rect.
   const chartWrapperRef = useRef<HTMLDivElement>(null);
   // const chartRef        = useRef<HTMLDivElement>(null);
   const saveTimer       = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -163,7 +163,7 @@ export default function ChartView({
     return () => ro.disconnect();
   }, []);
 
-  // ── Derived data ──
+  // ΓöÇΓöÇ Derived data ΓöÇΓöÇ
   const chartData = useMemo(() => {
     return rows.map(row => {
       const obj: Record<string, string | number> = {};
@@ -190,7 +190,7 @@ export default function ChartView({
     }));
   }, [chartData, config.xAxisKey, config.yAxisKeys, columns]);
 
-  // ── Load from DB ──
+  // ΓöÇΓöÇ Load from DB ΓöÇΓöÇ
   useEffect(() => {
     if (!databaseId) {
       setLoadedOnce(true);
@@ -228,7 +228,7 @@ export default function ChartView({
     return () => controller.abort();
   }, [databaseId]);
 
-  // ── Auto-save ──
+  // ΓöÇΓöÇ Auto-save ΓöÇΓöÇ
   const scheduleSave = useCallback(() => {
     if (!loadedOnce || !databaseId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -253,7 +253,7 @@ export default function ChartView({
 
   useEffect(() => { if (loadedOnce) scheduleSave(); }, [config, columns, rows, loadedOnce]);
 
-  // ── Fetch project databases for table linking ──
+  // ΓöÇΓöÇ Fetch project databases for table linking ΓöÇΓöÇ
   useEffect(() => {
     if (!projectId || dataTab !== "table") return;
     const controller = new AbortController();
@@ -279,7 +279,7 @@ export default function ChartView({
     return () => controller.abort();
   }, [projectId, dataTab, databaseId]);
 
-  // ── Link table ──
+  // ΓöÇΓöÇ Link table ΓöÇΓöÇ
   const loadFromTable = async (tableId: string) => {
     if (!tableId) return;
 
@@ -307,7 +307,7 @@ export default function ChartView({
     }
   };
 
-  // ── Auto-configure axes ──
+  // ΓöÇΓöÇ Auto-configure axes ΓöÇΓöÇ
   const autoConfigAxes = (cols: string[], dataRows: (string | number)[][]) => {
     if (!cols.length || !dataRows.length) return;
     const isNum    = cols.map((_, ci) => dataRows.slice(0, 5).every(r => r[ci] !== "" && !isNaN(Number(r[ci]))));
@@ -316,7 +316,7 @@ export default function ChartView({
     setConfig(prev => ({ ...prev, xAxisKey: firstStr, yAxisKeys: numericCols.slice(0, 4) }));
   };
 
-  // ── CSV import ──
+  // ΓöÇΓöÇ CSV import ΓöÇΓöÇ
   const handleCSVText = (text: string) => {
     const lines = text.trim().split(/\r?\n/);
     if (lines.length < 2) return;
@@ -357,7 +357,7 @@ export default function ChartView({
     }
   };
 
-  // ── Export ──
+  // ΓöÇΓöÇ Export ΓöÇΓöÇ
 // const exportSVG = () => {
 //   const wrapper = chartRef.current;
 //   if (!wrapper) return;
@@ -375,7 +375,7 @@ export default function ChartView({
 //   clone.setAttribute("height", height);
 //   clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-//   // 🔥 Add background (important)
+//   // ≡ƒöÑ Add background (important)
 //   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
 //   bg.setAttribute("width", "100%");
 //   bg.setAttribute("height", "100%");
@@ -408,7 +408,7 @@ export default function ChartView({
     a.click();
   };
 
-  // ── Row / column helpers ──
+  // ΓöÇΓöÇ Row / column helpers ΓöÇΓöÇ
   const addRow    = () => setRows(prev => [...prev, columns.map(() => "")]);
   const addCol    = () => { const name = `Col ${columns.length + 1}`; setColumns(prev => [...prev, name]); setRows(prev => prev.map(r => [...r, ""])); };
   const removeRow = (i: number) => setRows(prev => prev.filter((_, ri) => ri !== i));
@@ -428,8 +428,8 @@ export default function ChartView({
     }
   };
 
-  // ── Render chart ──
-  // ✅ FIX: ResponsiveContainer now receives an explicit `height={chartHeight}`
+  // ΓöÇΓöÇ Render chart ΓöÇΓöÇ
+  // Γ£à FIX: ResponsiveContainer now receives an explicit `height={chartHeight}`
   //    (measured in pixels via ResizeObserver) instead of height="100%".
   //    This prevents the Recharts SVG from computing an unbounded height and
   //    painting tick labels outside the clipping region of the page.
@@ -455,7 +455,7 @@ export default function ChartView({
     ) : null;
     const legend = showLegend ? <Legend wrapperStyle={{ fontSize: 12, color: "#9ca3af" }} /> : null;
 
-    // ── Column / Bar ──
+    // ΓöÇΓöÇ Column / Bar ΓöÇΓöÇ
     if (chartType === "column" || chartType === "bar") {
       const layout = chartType === "bar" ? "vertical" : "horizontal";
       return (
@@ -477,7 +477,7 @@ export default function ChartView({
       );
     }
 
-    // ── Line ──
+    // ΓöÇΓöÇ Line ΓöÇΓöÇ
     if (chartType === "line") {
       return (
         <ResponsiveContainer width="100%" height={chartHeight}>
@@ -496,7 +496,7 @@ export default function ChartView({
       );
     }
 
-    // ── Area ──
+    // ΓöÇΓöÇ Area ΓöÇΓöÇ
     if (chartType === "area") {
       return (
         <ResponsiveContainer width="100%" height={chartHeight}>
@@ -521,7 +521,7 @@ export default function ChartView({
       );
     }
 
-    // ── Pie ──
+    // ΓöÇΓöÇ Pie ΓöÇΓöÇ
     if (chartType === "pie") {
       const RADIAN = Math.PI / 180;
       const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
@@ -547,7 +547,7 @@ export default function ChartView({
       );
     }
 
-    // ── Scatter / Bubble ──
+    // ΓöÇΓöÇ Scatter / Bubble ΓöÇΓöÇ
     if (chartType === "scatter" || chartType === "bubble") {
       return (
         <ResponsiveContainer width="100%" height={chartHeight}>
@@ -570,192 +570,13 @@ export default function ChartView({
     return null;
   };
 
-  // ── Panel button ──
+  // ΓöÇΓöÇ Panel button ΓöÇΓöÇ
   const PBtn = ({ id, label }: { id: typeof activePanel; label: string }) => (
     <button onClick={() => setActivePanel(id)}
       className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition ${activePanel === id ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-700 hover:text-white"}`}>
       {label}
     </button>
   );
-
-  if (inputActivated) {
-    return (
-       // <div className="flex flex-col h-full rounded-xl border border-gray-800 bg-[#18191d] p-4 gap-3">
-      //   <input
-      //     readOnly
-      //     value=""
-      //     placeholder="Input..."
-      //     aria-label="Input"
-      //     title="Input"
-      //     onClick={() => setInputActivated(true)}
-      //     className="w-full rounded-lg border border-gray-700 bg-[#111317] px-3 py-2 text-sm text-gray-200 placeholder:text-gray-400 outline-none"
-      //   />
-
-      //   {inputActivated && (
-      //     <div className="rounded-lg border border-gray-700 bg-[#111317] p-4 text-sm text-gray-200">
-      //       Input active
-      //     </div>
-      //   )}
-      // </div>
-
-
-       <div className="w-full bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 min-h-0">
-          <div className="px-3 pt-3">
-            <button
-              onClick={() => setInputActivated(false)}
-              className="rounded-lg border border-blue-500 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white"
-            >
-              Back to visualization
-            </button>
-          </div>
-          <div className="flex border-b border-gray-800 shrink-0">
-            {(["manual", "import", "table"] as DataSource[]).map(t => (
-              <button key={t} onClick={() => setDataTab(t)}
-                className={`flex-1 py-2 text-[10px] font-semibold capitalize transition border-b-2 ${dataTab === t ? "border-blue-500 text-white" : "border-transparent text-gray-500 hover:text-gray-300"}`}>
-                {t === "manual" ? "✏️ Data" : t === "import" ? "📥 Import" : "🔗 Table"}
-              </button>
-            ))}
-          </div>
-
-          {/* ✅ FIX: `min-h-0` here so overflow-auto actually scrolls instead of expanding */}
-          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-
-            {/* Manual data table */}
-            {dataTab === "manual" && (
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
-  <table className="min-w-max w-full text-[10px] border-collapse">
-                  <thead>
-                    <tr className="sticky top-0 bg-gray-850 z-10">
-                      <th className="w-6 p-1 text-gray-600">#</th>
-                      {columns.map((col, ci) => (
-                        <th key={ci} className="p-0 border-b border-gray-800 group min-w-[60px]">
-                          <div className="flex items-center">
-                            <input value={col} onChange={e => updateColName(ci, e.target.value)}
-                              className="w-full bg-transparent text-gray-300 font-semibold px-1.5 py-1 focus:outline-none focus:bg-gray-800 text-[10px]" />
-                            <button onClick={() => removeCol(ci)}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 text-red-500 hover:text-red-400 transition shrink-0">
-                              <X size={8} />
-                            </button>
-                          </div>
-                        </th>
-                      ))}
-                      <th className="p-1">
-                        <button onClick={addCol} title="Add column"
-                          className="w-5 h-5 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white transition">
-                          <Plus size={9} />
-                        </button>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, ri) => (
-                      <tr key={ri} className="hover:bg-gray-800/50 group">
-                        <td className="p-1 text-gray-600 text-center">{ri + 1}</td>
-                        {row.map((cell, ci) => (
-                          <td key={ci} className="p-0 border-b border-gray-800/50">
-                            <input value={cell} onChange={e => updateCell(ri, ci, e.target.value)}
-                              className="w-full bg-transparent text-gray-300 px-1.5 py-1 focus:outline-none focus:bg-gray-800 text-[10px] min-w-0" />
-                          </td>
-                        ))}
-                        <td className="p-0.5">
-                          <button onClick={() => removeRow(ri)}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 text-red-500 hover:text-red-400 transition">
-                            <X size={8} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="sticky bottom-0 p-2 bg-gray-900 border-t border-gray-800 flex gap-2">
-                  <button onClick={addRow}
-                    className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px] rounded-lg transition">
-                    <Plus size={10} /> Add Row
-                  </button>
-                  <button onClick={() => autoConfigAxes(columns, rows)}
-                    className="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-400 rounded-lg transition" title="Auto-detect axes">
-                    <RefreshCw size={11} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Import tab */}
-            {dataTab === "import" && (
-              <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-3">
-                <div>
-                  <p className="text-[10px] text-gray-400 font-semibold mb-2">Upload File</p>
-                  <label className="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-gray-700 hover:border-blue-500 rounded-xl cursor-pointer transition">
-                    <Upload size={20} className="text-gray-500" />
-                    <div className="text-center">
-                      <p className="text-[11px] text-gray-400 font-medium">Drop CSV or Excel file</p>
-                      <p className="text-[10px] text-gray-600">or click to browse</p>
-                      <p className="text-[9px] text-gray-700 mt-1">.csv, .xlsx, .xls</p>
-                    </div>
-                    <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
-                  </label>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-semibold mb-2">Paste CSV</p>
-                  <textarea value={csvText} onChange={e => setCsvText(e.target.value)} rows={6}
-                    placeholder={"Name,Value\nJan,400\nFeb,300"}
-                    className="w-full bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-mono rounded-lg px-2.5 py-2 resize-none focus:outline-none focus:border-blue-500" />
-                  <button onClick={() => handleCSVText(csvText)} disabled={!csvText.trim()}
-                    className="mt-2 w-full py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-[11px] rounded-lg transition font-semibold">
-                    Parse & Apply
-                  </button>
-                </div>
-                <div className="bg-gray-800/50 rounded-xl p-2.5 text-[10px] text-gray-500 space-y-1">
-                  <p className="font-semibold text-gray-400">Format:</p>
-                  <p>• First row = column names</p>
-                  <p>• Numeric values auto-detected</p>
-                  <p>• Comma-separated values</p>
-                  <p className="text-gray-600 mt-1">Excel: requires <code className="bg-gray-700 px-1 rounded">npm install xlsx</code></p>
-                </div>
-              </div>
-            )}
-
-            {/* Link table tab */}
-            {dataTab === "table" && (
-              <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
-                <p className="text-[10px] text-gray-400 font-semibold">Select a table from this project</p>
-                {linkError && (
-                  <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-2 text-[10px] text-red-400">{linkError}</div>
-                )}
-                {linkedDBs.length === 0 && (
-                  <p className="text-[10px] text-gray-600 text-center py-6">No other databases found in this project.</p>
-                )}
-                {linkedDBs.map(db => (
-                  <button key={db._id} onClick={() => loadFromTable(db._id)} disabled={loadingLink}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition text-left ${config.linkedTableId === db._id ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500 hover:bg-gray-800"}`}>
-                    <span className="text-lg">{db.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold text-white truncate">{db.name}</p>
-                      <p className="text-[9px] text-gray-500">{db.viewType}</p>
-                    </div>
-                    {loadingLink && config.linkedTableId === db._id
-                      ? <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
-                      : <Link2 size={12} className="text-gray-600 shrink-0" />}
-                  </button>
-                ))}
-                <div className="bg-gray-800/50 rounded-xl p-2.5 text-[10px] text-gray-500 space-y-1 mt-2">
-                  <p>Links to table-type databases in the same project and imports their row data.</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-gray-800 px-3 py-2 flex items-center justify-between shrink-0">
-            <span className="text-[10px] text-gray-600">{rows.length} rows · {columns.length} cols</span>
-            {config.linkedTableId && (
-              <span className="text-[9px] text-blue-400 flex items-center gap-1">
-                <Link2 size={9} /> Linked
-              </span>
-            )}
-          </div>
-        </div>
-    );
-  }
 
   if (isInputActive) {
     return (
@@ -776,48 +597,24 @@ export default function ChartView({
       //     </div>
       //   )}
       // </div>
-      <>
-     
+
 
        <div className="w-full bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 min-h-0">
-          <div className="px-3 pt-3">
-            <button
-              onClick={() => setInputActivated(false)}
-              className="rounded-lg border border-blue-500 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white"
-            >
-              Back to visualization
-            </button>
-          </div>
-          
           <div className="flex border-b border-gray-800 shrink-0">
             {(["manual", "import", "table"] as DataSource[]).map(t => (
               <button key={t} onClick={() => setDataTab(t)}
                 className={`flex-1 py-2 text-[10px] font-semibold capitalize transition border-b-2 ${dataTab === t ? "border-blue-500 text-white" : "border-transparent text-gray-500 hover:text-gray-300"}`}>
-                {t === "manual" ? "✏️ Data" : t === "import" ? "📥 Import" : "🔗 Table"}
+                {t === "manual" ? "Γ£Å∩╕Å Data" : t === "import" ? "≡ƒôÑ Import" : "≡ƒöù Table"}
               </button>
             ))}
           </div>
 
-          {/* ✅ FIX: `min-h-0` here so overflow-auto actually scrolls instead of expanding */}
+          {/* Γ£à FIX: `min-h-0` here so overflow-auto actually scrolls instead of expanding */}
           <div className="flex-1 overflow-hidden flex flex-col min-h-0">
 
             {/* Manual data table */}
             {dataTab === "manual" && (
       <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
-         <div className="flex gap-3 px-3 pt-3">
-        <button
-          className="rounded-lg border border-blue-500 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white"
-          onClick={() => setInputActivated(false)}
-        >
-          visualization
-        </button>
-        <button
-          className="rounded-lg border border-gray-700 px-3 py-1.5 text-[11px] font-semibold text-gray-300 hover:bg-gray-800"
-          onClick={() => setInputActivated(true)}
-        >
-          input
-        </button>
-      </div>
   <table className="min-w-max w-full text-[10px] border-collapse">
                   <thead>
                     <tr className="sticky top-0 bg-gray-850 z-10">
@@ -878,7 +675,6 @@ export default function ChartView({
             {/* Import tab */}
             {dataTab === "import" && (
               <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-3">
-                
                 <div>
                   <p className="text-[10px] text-gray-400 font-semibold mb-2">Upload File</p>
                   <label className="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-gray-700 hover:border-blue-500 rounded-xl cursor-pointer transition">
@@ -903,9 +699,9 @@ export default function ChartView({
                 </div>
                 <div className="bg-gray-800/50 rounded-xl p-2.5 text-[10px] text-gray-500 space-y-1">
                   <p className="font-semibold text-gray-400">Format:</p>
-                  <p>• First row = column names</p>
-                  <p>• Numeric values auto-detected</p>
-                  <p>• Comma-separated values</p>
+                  <p>ΓÇó First row = column names</p>
+                  <p>ΓÇó Numeric values auto-detected</p>
+                  <p>ΓÇó Comma-separated values</p>
                   <p className="text-gray-600 mt-1">Excel: requires <code className="bg-gray-700 px-1 rounded">npm install xlsx</code></p>
                 </div>
               </div>
@@ -942,7 +738,7 @@ export default function ChartView({
           </div>
 
           <div className="border-t border-gray-800 px-3 py-2 flex items-center justify-between shrink-0">
-            <span className="text-[10px] text-gray-600">{rows.length} rows · {columns.length} cols</span>
+            <span className="text-[10px] text-gray-600">{rows.length} rows ┬╖ {columns.length} cols</span>
             {config.linkedTableId && (
               <span className="text-[9px] text-blue-400 flex items-center gap-1">
                 <Link2 size={9} /> Linked
@@ -950,7 +746,6 @@ export default function ChartView({
             )}
           </div>
         </div>
-        </>
     );
   }
 
@@ -964,24 +759,10 @@ export default function ChartView({
     );
   }
   return (
-    // ✅ FIX: root div must be `overflow-hidden` so no child can paint outside it.
+    // Γ£à FIX: root div must be `overflow-hidden` so no child can paint outside it.
     <div className="flex flex-col h-full bg-transparent text-white overflow-y-auto rounded-xl">
-      <div className="flex gap-3 px-3 pt-3">
-        <button
-          className="rounded-lg border border-blue-500 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white"
-          onClick={() => setInputActivated(false)}
-        >
-          visualization
-        </button>
-        <button
-          className="rounded-lg border border-gray-700 px-3 py-1.5 text-[11px] font-semibold text-gray-300 hover:bg-gray-800"
-          onClick={() => setInputActivated(true)}
-        >
-          input
-        </button>
-      </div>
 
-      {/* ══ TOP BAR ══ */}
+      {/* ΓòÉΓòÉ TOP BAR ΓòÉΓòÉ */}
       <div className="flex justify-between items-center  gap-2 px-3 py-2 bg-transparent border-b border-gray-800 shrink-0">
          <div className="max-w-[420px] overflow-x-auto bg-gray-800 rounded-xl p-0.5 shrink-0">
           <div className="flex items-center gap-0.5 min-w-max">
@@ -1000,8 +781,8 @@ export default function ChartView({
        
 
         <div className="flex items-center gap-1 shrink-0">
-          {saving  && <span className="text-[9px] text-amber-400 animate-pulse">● Saving</span>}
-          {!saving && savedAt && <span className="text-[9px] text-emerald-400">✓ {savedAt}</span>}
+          {saving  && <span className="text-[9px] text-amber-400 animate-pulse">ΓùÅ Saving</span>}
+          {!saving && savedAt && <span className="text-[9px] text-emerald-400">Γ£ô {savedAt}</span>}
           <button onClick={() => exportChart(chartRef, config.title)} title="Export SVG"
             className="flex items-center gap-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-[11px] rounded-lg transition">
             <Download size={11} /> SVG
@@ -1015,36 +796,36 @@ export default function ChartView({
         </div>
       </div>
 
-      {/* ✅ FIX: `min-h-0` on this row prevents it from pushing flex children
+      {/* Γ£à FIX: `min-h-0` on this row prevents it from pushing flex children
            beyond the parent's height, which is the root cause of the leaked
            axis tick numbers appearing below the card boundary. */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
-        {/* ══ LEFT: Data panel ══ */}
-        {/* ✅ FIX: `min-h-0` added so the inner scroll area stays within bounds */}
+        {/* ΓòÉΓòÉ LEFT: Data panel ΓòÉΓòÉ */}
+        {/* Γ£à FIX: `min-h-0` added so the inner scroll area stays within bounds */}
         {/* <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 min-h-0"> */}
           {/* <div className="flex border-b border-gray-800 shrink-0">
             {(["manual", "import", "table"] as DataSource[]).map(t => (
               <button key={t} onClick={() => setDataTab(t)}
                 className={`flex-1 py-2 text-[10px] font-semibold capitalize transition border-b-2 ${dataTab === t ? "border-blue-500 text-white" : "border-transparent text-gray-500 hover:text-gray-300"}`}>
-                {t === "manual" ? "✏️ Data" : t === "import" ? "📥 Import" : "🔗 Table"}
+                {t === "manual" ? "Γ£Å∩╕Å Data" : t === "import" ? "≡ƒôÑ Import" : "≡ƒöù Table"}
               </button>
             ))}
           </div> */}
 
-          {/* ✅ FIX: `min-h-0` here so overflow-auto actually scrolls instead of expanding */}
+          {/* Γ£à FIX: `min-h-0` here so overflow-auto actually scrolls instead of expanding */}
           
         {/* </div> */}
 
-        {/* ══ CENTER: Chart preview ══ */}
-        {/* ✅ FIX: `min-h-0` and `min-w-0` ensure this flex child doesn't
-             grow past the container — without these, Recharts' SVG can
+        {/* ΓòÉΓòÉ CENTER: Chart preview ΓòÉΓòÉ */}
+        {/* Γ£à FIX: `min-h-0` and `min-w-0` ensure this flex child doesn't
+             grow past the container ΓÇö without these, Recharts' SVG can
              measure an unbounded offsetHeight and render ticks beyond the page. */}
         <div className="flex-1 overflow-hidden flex flex-col bg-gray-950 min-w-0 min-h-0">
 
-          {/* ✅ FIX: The chart wrapper uses `relative` + `overflow-hidden` so the
+          {/* Γ£à FIX: The chart wrapper uses `relative` + `overflow-hidden` so the
                Recharts SVG is hard-clipped. `ref={chartWrapperRef}` feeds real
-               pixel height to `chartHeight` state → passed as explicit `height`
+               pixel height to `chartHeight` state ΓåÆ passed as explicit `height`
                prop to every `<ResponsiveContainer>`. */}
           <div
             ref={chartWrapperRef}
@@ -1056,21 +837,21 @@ export default function ChartView({
                 renderChart()
               ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-600">
-                  <span className="text-5xl opacity-30">📊</span>
-                  <p className="text-sm">No data yet — add rows or import a file</p>
+                  <span className="text-5xl opacity-30">≡ƒôè</span>
+                  <p className="text-sm">No data yet ΓÇö add rows or import a file</p>
                 </div>
               )}
             </div>
           </div>
 
           <div className="flex items-center justify-between px-4 py-1.5 bg-gray-900 border-t border-gray-800 shrink-0 text-[10px] text-gray-600">
-            <span>{config.chartType} chart · {rows.length} data points</span>
-            <span>X: {config.xAxisKey} · Y: {config.yAxisKeys.join(", ")}</span>
+            <span>{config.chartType} chart ┬╖ {rows.length} data points</span>
+            <span>X: {config.xAxisKey} ┬╖ Y: {config.yAxisKeys.join(", ")}</span>
           </div>
         </div>
 
-        {/* ══ RIGHT: Settings panel ══ */}
-        {/* ✅ FIX: `min-h-0` added so inner overflow-y-auto works correctly */}
+        {/* ΓòÉΓòÉ RIGHT: Settings panel ΓòÉΓòÉ */}
+        {/* Γ£à FIX: `min-h-0` added so inner overflow-y-auto works correctly */}
          
         
           <div className="w-56 bg-gray-900 border-l border-gray-800 overflow-y-auto shrink-0 flex flex-col min-h-0">
@@ -1083,7 +864,7 @@ export default function ChartView({
  
           <div className="flex-1 overflow-y-auto p-3 space-y-4 min-h-0">
               
-            {/* ── AXES panel ── */}
+            {/* ΓöÇΓöÇ AXES panel ΓöÇΓöÇ */}
           
             
             {activePanel === "axes" && (
@@ -1137,7 +918,7 @@ export default function ChartView({
                           <select value={config.yAxisKeys[idx - 1] || ""}
                             onChange={e => { const keys = [...config.yAxisKeys]; keys[idx - 1] = e.target.value; updCfg("yAxisKeys", keys); }}
                             className="w-full h-7 text-[11px] bg-gray-800 border border-gray-700 text-white rounded-lg px-2 focus:outline-none">
-                            <option value="">— none —</option>
+                            <option value="">ΓÇö none ΓÇö</option>
                             {columns.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
@@ -1191,7 +972,7 @@ export default function ChartView({
               </div>
             )}
 
-            {/* ── STYLE panel ── */}
+            {/* ΓöÇΓöÇ STYLE panel ΓöÇΓöÇ */}
             {activePanel === "style" && (
               <div className="space-y-4">
                 <div>
@@ -1271,7 +1052,7 @@ export default function ChartView({
               </div>
             )}
 
-            {/* ── DATA INFO panel ── */}
+            {/* ΓöÇΓöÇ DATA INFO panel ΓöÇΓöÇ */}
             {activePanel === "data_info" && (
               <div className="space-y-3">
                 <p className="text-[9px] text-gray-500 uppercase tracking-widest">Dataset Statistics</p>

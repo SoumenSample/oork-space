@@ -78,7 +78,7 @@ export default function DatabaseViewRenderer({
   const id = db._id;
   /* ── Task-oriented views: receive active view for filtering ── */
   if (db.viewType === "editor") {
-    return <EditorComponent databaseId={id} />;
+    return <EditorComponent databaseId={id} projectId={db.projectId} />;
   }
 
   if (db.viewType === "board") {

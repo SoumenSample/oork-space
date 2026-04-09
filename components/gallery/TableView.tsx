@@ -257,7 +257,7 @@ export default function TableView({
 
 
   return (
-    <Card className={`border-none ${isDark ? "bg-slate-800" : "bg-white"} shadow-sm`}>
+    <Card className={`border-none ${isDark ? "bg-zinc-900" : "bg-zinc-100"} shadow-sm`}>
       {/* Header */}
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">

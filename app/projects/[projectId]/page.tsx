@@ -47,7 +47,7 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className={`min-h-screen ${isDark ? "bg-gray-800 text-white" : "bg-gray-50 text-gray-900"}`}>
+    <div className={`min-h-screen ${isDark ? "bg-zinc-900 text-white" : "bg-zinc-100 text-gray-900"}`}>
       <div className="w-full max-w-7xl mx-auto px-6 py-10">
         <ProjectHeader project={project} />
 
