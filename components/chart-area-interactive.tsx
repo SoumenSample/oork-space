@@ -213,34 +213,23 @@ export function ChartAreaInteractive() {
           config={chartConfig}
           className="aspect-auto h-[250px] w-full"
         >
-          <AreaChart data={filteredData}>
-            <defs>
-              <linearGradient id="fillDesktop" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="var(--color-desktop)"
-                  stopOpacity={1.0}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="var(--color-desktop)"
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-              <linearGradient id="fillMobile" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="var(--color-mobile)"
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="var(--color-mobile)"
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} />
+          <AreaChart data={filteredData} >
+           <defs>
+  {/* 🌸 ROSE GRADIENT - DESKTOP */}
+  <linearGradient id="fillDesktop" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.9} />   {/* rose-500 */}
+    <stop offset="50%" stopColor="#fb7185" stopOpacity={0.5} />  {/* rose-400 */}
+    <stop offset="95%" stopColor="#ffe4e6" stopOpacity={0.1} />  {/* rose-100 */}
+  </linearGradient>
+
+  {/* 🌸 ROSE GRADIENT - MOBILE (lighter) */}
+  <linearGradient id="fillMobile" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="5%" stopColor="#e11d48" stopOpacity={0.8} />   {/* rose-600 */}
+    <stop offset="50%" stopColor="#fb7185" stopOpacity={0.4} />
+    <stop offset="95%" stopColor="#fff1f2" stopOpacity={0.1} />
+  </linearGradient>
+</defs>
+            <CartesianGrid vertical={false}  />
             <XAxis
               dataKey="date"
               tickLine={false}
@@ -273,14 +262,16 @@ export function ChartAreaInteractive() {
               dataKey="mobile"
               type="natural"
               fill="url(#fillMobile)"
-              stroke="var(--color-mobile)"
+              // stroke="var(--color-mobile)"
+               stroke="#f43f5e" 
               stackId="a"
             />
             <Area
               dataKey="desktop"
               type="natural"
               fill="url(#fillDesktop)"
-              stroke="var(--color-desktop)"
+              // stroke="var(--color-desktop)"
+               stroke="#e11d48" 
               stackId="a"
             />
           </AreaChart>

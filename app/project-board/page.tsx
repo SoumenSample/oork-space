@@ -163,7 +163,7 @@ export default function ProjectsBoardPage() {
 );
 
   return (
-    <div className={`min-h-screen border border-gray-300 rounded-2xl ${isDark ? "bg-zinc-900 text-gray-300" : "bg-white text-gray-900"}`}>
+    <div className={`min-h-screen border  rounded-2xl ${isDark ? "bg-black border-gray-900  text-gray-300" : "bg-white border-gray-300 text-gray-900"}`}>
       <SiteHeader/>
       {/* Confirm delete modal */}
       <ConfirmDeleteModal
@@ -208,7 +208,7 @@ export default function ProjectsBoardPage() {
                       {/* project button */}
                       <button
                         onClick={() => setActiveProjectId(p._id)}
-                        className={`flex-1 min-w-0 text-left px-3 bg-card text-card-foreground py-2.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all touch-manipulation font-medium ${
+                        className={`flex-1 min-w-0 text-left px-1 bg-card text-card-foreground py-2.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all touch-manipulation font-medium ${
                           active
                             ? "bg-gradient-to-r from-teal-600 to-rose-600 text-white shadow-md"
                             : isDark
