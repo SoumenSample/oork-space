@@ -40,6 +40,7 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
 
   const html = safeHtml(page.published?.html || "");
   const css = safeCss(page.published?.css || "");
+  const js = String(page.published?.js || "");
 
   return (
     <main>
@@ -71,6 +72,8 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
 
   document.addEventListener('submit', onSubmit);
 })();
+
+${js}
 `,
         }}
       />

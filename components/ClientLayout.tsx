@@ -51,6 +51,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
   // Shared pages now use the same app chrome for consistent UX.
   const isSharedPage = pathname?.startsWith('/shared');
+  const isPublicSitePage = pathname?.startsWith('/p/');
   const isAuthPage = pathname?.startsWith('/login') || pathname?.startsWith('/signup');
 
   // Set mounted on client
@@ -60,10 +61,10 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
   // Check auth on mount
   useEffect(() => {
-    if (mounted) {
+    if (mounted && !isPublicSitePage) {
       checkAuth();
     }
-  }, [mounted]);
+  }, [mounted, isPublicSitePage, checkAuth]);
 
   // Handle redirect after auth check - use setTimeout to avoid synchronous setState
   useEffect(() => {
@@ -85,6 +86,8 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   }, [isAuthPage]);
 
   useEffect(() => {
+    if (isPublicSitePage) return;
+
     if (mounted) {
       // Use requestAnimationFrame to avoid setState in effect warning
       const animId = requestAnimationFrame(() => {
@@ -95,7 +98,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
         cancelAnimationFrame(animId);
       };
     }
-  }, [pathname, mounted]);
+  }, [pathname, mounted, isPublicSitePage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,14 +180,22 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
       }
     };
 
-    if (mounted && (isAuthenticated || isSharedPage)) {
+    if (mounted && !isPublicSitePage && (isAuthenticated || isSharedPage)) {
       void loadHeaderMeta();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [pathname, mounted, isAuthenticated, isSharedPage]);
+  }, [pathname, mounted, isAuthenticated, isSharedPage, isPublicSitePage]);
+
+  if (isPublicSitePage) {
+    return (
+      <LayoutContext.Provider value={{ view, setView }}>
+        {children}
+      </LayoutContext.Provider>
+    );
+  }
 
   // Show loading while checking auth
   if (!mounted || authLoading) {
