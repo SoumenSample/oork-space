@@ -48,3 +48,19 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     return NextResponse.json({ success: false, error: "Failed to save workflow" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    await connectDB();
+    const auth = await getAuthUser();
+    if (!auth?.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id } = await context.params;
+    const wf = await NocodeWorkflow.findOneAndDelete({ _id: id, userId: auth.userId });
+    if (!wf) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ success: false, error: "Failed to delete workflow" }, { status: 500 });
+  }
+}
