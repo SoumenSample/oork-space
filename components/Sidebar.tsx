@@ -632,7 +632,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
         {/* ── LOGO ── */}
         {/* <div className={`${open ? "pt-5 pb-3" : "px-3 pt-4 pb-2"}`}> */}
           {/* <WorkspaceLogo open={open} isDark={isDark} /> */}
-            <div className={`sticky top-0 z-20 w-full h-15 ${isDark ? "bg-transparent border-none" : "bg-zinc-50"} pt-3 px-4 mb-6`}>
+            <div className={`sticky top-0 z-20 w-full h-15 ${isDark ? "bg-zinc-900 border-none" : "bg-zinc-50"} pt-3 px-4 mb-6`}>
           {open &&<Image
   src={logo}
   alt="Work Space"
@@ -653,7 +653,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
 
         {/* NAV */}
         <div className={`${open ? "px-6 py-2" : "px-2 py-2"}`}>
-          <div className="space-y-2 relative -mt-10 -ml-5">
+          <div className="space-y-2 relative -mt-5 -ml-5">
             {open && <div className={`absolute left-[8px] top-0 bottom-0 w-px ${isDark?"bg-none":"bg-none"}`}/>}
 
             {menuItems.map((item) => {
@@ -668,7 +668,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
                     <div
                       className={`absolute bg-black transition-opacity ${
                         open
-                          ? "inset-0 w-60 ml-3 rounded-xl"
+                          ? "inset-0 w-65 ml-3 rounded-xl"
                           : "inset-y-0 left-2 right-0 rounded-r-xl"
                       } ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-10"}`}
                     />
@@ -714,7 +714,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
                               {item.key!=="dashboard" && item.key!=="whiteboard" && item.key!=="video-editing" && item.key!=="presentation" && item.key!=="social-media" && item.key!=="website-builder" && <Plus size={16}/>}
                             </button>
                             {item.key==="project-board" && (
-                              <button onClick={() => setProjectBoardOpen((v)=>!v)} className={`p-1 rounded-md ${hoverClass}`}>
+                              <button onClick={() => setProjectBoardOpen((v)=>!v)} className={`p-1 rounded-md hover:border ${isDark?" hover:border-white":" hover:border-gray-500"} ${projectBoardOpen?"bg-transparent":"bg-transparent"}`} title={projectBoardOpen?"Collapse":"Expand"}>
                                 <ChevronDown size={16} className={`transition-transform ${projectBoardOpen?"rotate-0":"-rotate-90"}`}/>
                               </button>
                             )}

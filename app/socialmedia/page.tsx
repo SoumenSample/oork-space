@@ -155,7 +155,7 @@ export default function SocialMediaPage() {
 
   if (selectedPost) {
     return (
-      <div className={`min-h-screen  rounded-2xl border border-gray-300${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+      <div className={`min-h-screen  rounded-2xl ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
         <SiteHeader/>
         <div className="border-b border-white/10 bg-linear-to-r from-fuchsia-600 via-pink-600 to-orange-500 px-4 py-3 shadow-lg shadow-black/10">
           <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
@@ -166,7 +166,7 @@ export default function SocialMediaPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white backdrop-blur hover:bg-white/20 transition"
               >
                 <ArrowLeft size={16} />
-                Social media library
+                Canvas library
               </button>
               <ShareButton
                 resourceId={selectedPost._id}
@@ -199,7 +199,7 @@ export default function SocialMediaPage() {
   const projectOptions = projects.length > 0 ? projects : [];
 
   return (
-    <div className={`min-h-screen rounded-2xl border border-gray-300 ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
+    <div className={`min-h-screen rounded-2xl ${isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
       <SiteHeader/>
       <div className="relative overflow-hidden border-b border-white/10 bg-linear-to-br from-slate-950 via-slate-900 to-fuchsia-950 px-6 py-10 text-white">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-30">
@@ -210,7 +210,7 @@ export default function SocialMediaPage() {
         <div className="relative mx-auto max-w-7xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/75 backdrop-blur">
             <Sparkles size={14} />
-            Social media workspace
+            Canvas workspace
           </div>
           <div className="mt-5 grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
             <div>

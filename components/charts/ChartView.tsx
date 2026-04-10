@@ -905,7 +905,7 @@ export default function ChartView({
           visualization
         </button>
         <button
-          className="rounded-lg border border-gray-700 px-3 py-1.5 text-[11px] font-semibold text-gray-300 hover:bg-gray-800"
+          className="rounded-lg border border-gray-700 px-3 py-1.5 text-[11px] font-semibold text-black hover:bg-gray-800"
           onClick={() => setInputActivated(true)}
         >
           input
@@ -1058,7 +1058,7 @@ export default function ChartView({
   }
   return (
     // ✅ FIX: root div must be `overflow-hidden` so no child can paint outside it.
-    <div className="flex flex-col h-full bg-transparent text-white overflow-y-auto rounded-xl">
+    <div className="flex flex-col h-full bg-black text-white overflow-y-auto rounded-xl">
       <div className="flex gap-3 px-3 pt-3">
         <button
           className="rounded-lg border border-blue-500 bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white"

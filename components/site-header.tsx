@@ -5,13 +5,16 @@ import { Separator } from "@/components/ui/separator"
 import { LogOut, Menu, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
+import ShareButton from "./ShareButton";
 
 export function SiteHeader() {
   const { setTheme ,resolvedTheme } = useTheme();
   const { logout } = useAuth();
   const pathname = usePathname();
   const isDark = resolvedTheme === "dark";
+  const [shareProject, setShareProject] = useState<{ id: string; name: string } | null>(null);
 
   // const [showSharePopover, setShowSharePopover] = useState(false);
   
@@ -23,6 +26,57 @@ export function SiteHeader() {
   const sectionTitle = pathname.startsWith("/nocode")
     ? "Website Builder"
     : "Dashboard Section";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProjectMeta = async () => {
+      if (!pathname.startsWith("/projects/")) {
+        setShareProject(null);
+        return;
+      }
+
+      const segments = pathname.split("/").filter(Boolean);
+      const projectId = segments[1];
+
+      if (!projectId) {
+        setShareProject(null);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/projects", { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) {
+            setShareProject({ id: projectId, name: "Project" });
+          }
+          return;
+        }
+
+        const projects = await res.json();
+        const matched = Array.isArray(projects)
+          ? projects.find((project: { _id?: string; name?: string }) => project?._id === projectId)
+          : null;
+
+        if (!cancelled) {
+          setShareProject({
+            id: projectId,
+            name: matched?.name || "Project",
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setShareProject({ id: projectId, name: "Project" });
+        }
+      }
+    };
+
+    void loadProjectMeta();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -38,6 +92,9 @@ export function SiteHeader() {
         <h1 className="text-base font-medium">{sectionTitle}</h1>
       </div>
       <div className="flex items-center gap-4">
+          {shareProject ? (
+            <ShareButton projectId={shareProject.id} projectName={shareProject.name} />
+          ) : null}
           <div>
                      
                         <div className="relative w-full rounded-2xl overflow-hidden bg-linear-to-br from-rose-500 via-pink-500 to-purple-500"
@@ -57,7 +114,7 @@ export function SiteHeader() {
                         </div> 
                     </div>
            {/* Logout */}
-           <button
+           {/* <button
              onClick={logout}
              className="relative px-4 py-3 rounded-xl font-semibold text-sm text-white
                bg-linear-to-br from-rose-500 via-pink-500 to-purple-500
@@ -71,7 +128,8 @@ export function SiteHeader() {
                <LogOut size={16} />
                Logout
              </span>
-           </button>
+           </button> */}
+           
           </div>
     </header>
   )

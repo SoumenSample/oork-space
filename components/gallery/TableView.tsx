@@ -259,7 +259,7 @@ export default function TableView({
   return (
     <Card className={`border-none ${isDark ? "bg-zinc-900" : "bg-transparent"} shadow-sm`}>
       {/* Header */}
-      <CardHeader className={`flex flex-row items-center justify-between ${isDark ? "text-white bg-black" : "bg-transparent"} border-b`}>
+      <CardHeader className={`flex flex-row items-center justify-between ${isDark ? "text-white bg-transparent" : "bg-transparent"} border-b`}>
         <div className="flex items-center gap-2 flex-wrap">
           <CardTitle>Table</CardTitle>
           <Badge variant="outline" className="text-xs">{viewLabel}</Badge>
@@ -305,8 +305,8 @@ export default function TableView({
           <div className="min-w-full w-max">
             <hr/>
             {/* Columns */}
-            <div className="sticky top-0 z-10 flex border-b bg-muted/60 backdrop-blur">
-              <div className="w-[60px] shrink-0 px-3 py-2 text-xs border-l text-muted-foreground border-r">
+            <div className=" top-0 z-10 flex border-b bg-muted/60 backdrop-blur">
+              <div className="w-[60px]  px-3 py-2 text-xs border-l text-muted-foreground border-r">
                 #
               </div>
 

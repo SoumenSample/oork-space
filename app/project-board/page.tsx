@@ -193,10 +193,10 @@ export default function ProjectsBoardPage() {
             <div className={`rounded-xl sm:rounded-2xl border overflow-hidden shadow-sm ${isDark ? "bg-transparent border-gray-800" : "bg-transparent border-gray-200"}`}>
 
               {/* header */}
-              <div className={`px-3 sm:px-4 py-2 sm:py-3 font-semibold text-xs sm:text-sm border-b ${isDark ? "bg-[#1e1f23] border-gray-800 text-gray-100" : "bg-rose-50 border-rose-100 text-gray-900"}`}>
+              <div className={`px-3 sm:px-4 py-2 sm:py-3 font-semibold text-xs sm:text-sm border-b ${isDark ? "bg-zinc-900 border-gray-800 text-gray-100" : "bg-zinc-50 border-gray-300 text-gray-900"}`}>
                 Projects
               </div>
-              <p className={`px-3 sm:px-4 py-1 border-b font-mono text-xs sm:text-sm ${isDark ? "bg-[#1e1f23] border-gray-800 text-gray-500" : "bg-rose-50 border-rose-100 text-gray-400"}`}>
+              <p className={`px-3 sm:px-4 py-1 border-b font-mono text-xs sm:text-sm ${isDark ? "bg-zinc-900 border-gray-800 text-gray-500" : "bg-zinc-50 border-gray-300 text-gray-400"}`}>
                 {projects.length} project{projects.length !== 1 ? "s" : ""}
               </p>
 
@@ -208,12 +208,12 @@ export default function ProjectsBoardPage() {
                       {/* project button */}
                       <button
                         onClick={() => setActiveProjectId(p._id)}
-                        className={`flex-1 min-w-0 text-left px-1 bg-card text-card-foreground py-2.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all touch-manipulation font-medium ${
+                        className={`flex-1 min-w-0 text-left px-1 py-2.5 sm:py-2 rounded-lg sm:rounded-xl border text-xs sm:text-sm transition-all touch-manipulation font-medium ${
                           active
-                            ? "bg-gradient-to-r from-teal-600 to-rose-600 text-white shadow-md"
+                            ? "bg-zinc-900 border-white text-white shadow-md"
                             : isDark
-                              ? "text-gray-300 hover:bg-gradient-to-r hover:from-teal-600/70 hover:to-rose-600/70 hover:text-white"
-                              : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                              ? "bg-black border-gray-700 text-gray-200 hover:border-gray-500 hover:text-white"
+                              : "bg-transparent border-gray-300 text-gray-700 hover:border-gray-400 hover:text-gray-900"
                         }`}
                       >
                         <span className="mr-1.5 sm:mr-2">{p.emoji}</span>
@@ -249,7 +249,7 @@ export default function ProjectsBoardPage() {
             <div className={`rounded-xl sm:rounded-2xl border overflow-hidden flex flex-col max-h-[600px] sm:max-h-[700px] md:h-[calc(100vh-180px)] shadow-sm ${isDark ? "bg-transparent border-gray-800" : "bg-transparent border-gray-200"}`}>
 
               {/* header */}
-              <div className={`px-3 sm:px-4 py-2.5 sm:py-3 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shrink-0 ${isDark ? "bg-[#1e1f23] border-gray-800" : "bg-rose-50 border-rose-100"}`}>
+              <div className={`px-3 sm:px-4 py-2.5 sm:py-3 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shrink-0 ${isDark ? "bg-zinc-900 border-gray-800" : "bg-zinc-50 border-gray-300"}`}>
                 <div className="w-full sm:w-auto">
                   <div className={`font-semibold text-xs sm:text-sm truncate ${isDark ? "text-gray-100" : "text-gray-900"}`}>
                     <span className="mr-1.5">{activeProject?.emoji}</span>
@@ -274,8 +274,8 @@ export default function ProjectsBoardPage() {
                       }
                       className={`w-full rounded-xl sm:rounded-2xl border transition-all p-3 sm:p-4 text-left shadow-sm hover:shadow-lg touch-manipulation group ${
                         isDark
-                          ? "bg-[#1e1f23] border-gray-700 hover:bg-[#252730] hover:border-gray-600"
-                          : "bg-rose-50 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                          ? "bg-zinc-900 border-gray-700 hover:bg-[#252730] hover:border-gray-600"
+                          : "bg-zinc-50 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
                       }`}
                     >
                       <div className="flex items-start gap-2 pr-6">
