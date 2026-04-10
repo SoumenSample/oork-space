@@ -44,7 +44,7 @@ export const EMOJI_LIST = [
 type MenuKey =
   | "dashboard" | "project-board" | "whiteboard" | "presentation" | "video-editing" | "social-media" | "task-board"
   | "schedule"  | "activities"    | "inbox"
-  | "template"  | "market-places";
+  | "template"  | "market-places" | "website-builder";
 
 type SidebarPage = {
   _id: string; pageName: string; menuKey: MenuKey;
@@ -610,6 +610,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
   const menuItems: { key: MenuKey; label: string; path: string; icon: React.ReactNode }[] = [
     { key: "dashboard",     label: "Dashboard",     path: "/",              icon: <LayoutGrid size={open?20:22}/> },
     { key: "project-board", label: "Project Board", path: "/project-board", icon: <Folder size={open?22:24}/> },
+    { key: "website-builder", label: "Website Builder", path: "/nocode/apps", icon: <Globe size={open?20:22}/> },
     // { key: "docs", label: "Docs", path: docsPath, icon: <FileText size={open?20:22}/> },
     {key: "whiteboard", label:"Whiteboard", path:"/whiteboard", icon: <AppWindow size={open?22:24}/> },
     {key: "presentation", label:"Presentation", path:"/presentation", icon: <PresentationIcon size={open?22:24}/> },
@@ -710,7 +711,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
                                 openCreateModal(item.key);
                               }}
                               className={`p-1 rounded-md ${hoverClass}`} title="Add">
-                              {item.key!=="dashboard" && item.key!=="whiteboard" && item.key!=="video-editing" && item.key!=="presentation" && item.key!=="social-media" && <Plus size={16}/>}
+                              {item.key!=="dashboard" && item.key!=="whiteboard" && item.key!=="video-editing" && item.key!=="presentation" && item.key!=="social-media" && item.key!=="website-builder" && <Plus size={16}/>}
                             </button>
                             {item.key==="project-board" && (
                               <button onClick={() => setProjectBoardOpen((v)=>!v)} className={`p-1 rounded-md hover:border ${isDark?" hover:border-white":" hover:border-gray-500"} ${projectBoardOpen?"bg-transparent":"bg-transparent"}`} title={projectBoardOpen?"Collapse":"Expand"}>
