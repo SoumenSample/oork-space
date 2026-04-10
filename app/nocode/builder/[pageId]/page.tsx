@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const GrapesEditor = dynamic(() => import("@/components/nocode/grapes/GrapesEditor"), {
   ssr: false,
@@ -43,13 +44,42 @@ export default function NocodeBuilderPage() {
     void load();
   }, [pageId]);
 
-  if (loading) return <div>Loading builder...</div>;
-  if (!page) return <div>Page not found</div>;
+  if (loading) {
+    return (
+      <div className="flex min-h-full flex-col bg-background text-foreground">
+        <SiteHeader />
+        <section className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8">
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">Loading builder...</CardContent>
+          </Card>
+        </section>
+      </div>
+    );
+  }
+
+  if (!page) {
+    return (
+      <div className="flex min-h-full flex-col bg-background text-foreground">
+        <SiteHeader />
+        <section className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8">
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">Page not found</CardContent>
+          </Card>
+        </section>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col bg-background text-foreground">
       <SiteHeader />
-      <div style={{ padding: 12 }}>
+      <section className="mx-auto w-full max-w-[1500px] px-3 py-3 md:px-4 md:py-4">
+        <Card className="mb-3 py-0">
+          <CardHeader className="border-b border-border/60 pb-4">
+            <CardTitle className="text-xl md:text-2xl">{page?.name || "Page Builder"}</CardTitle>
+            <CardDescription>Design, edit, and publish this page from the visual editor.</CardDescription>
+          </CardHeader>
+        </Card>
         <GrapesEditor
           pageId={pageId}
           initialProjectData={page?.draft?.grapesProjectData}
@@ -89,7 +119,7 @@ export default function NocodeBuilderPage() {
             alert("Published");
           }}
         />
-      </div>
+      </section>
     </div>
   );
 }
