@@ -27,6 +27,7 @@ export default class TableBlockTool {
     this.root = null;
   }
 
+  
   static get toolbox() {
     return {
       title: "Table View",
@@ -47,11 +48,15 @@ export default class TableBlockTool {
       return this.wrapper;
     }
 
+    const isDark =
+      document.documentElement.classList.contains("dark") ||
+      document.documentElement.getAttribute("data-theme") === "dark";
+
     this.data.databaseId = databaseId;
     this.root = createRoot(this.wrapper);
     this.root.render(
-      <div className="rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
-        <TableView databaseId={databaseId} />
+      <div className={`${isDark ? 'bg-transparent ' : 'bg-transparent border-gray-200'} rounded-2xl border p-2 shadow-sm`}>
+        <TableView databaseId={databaseId} isDark={isDark} />
       </div>
     );
 

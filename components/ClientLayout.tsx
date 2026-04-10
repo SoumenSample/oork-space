@@ -235,7 +235,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* <Header collaborators={headerCollaborators} title={headerTitle} /> */}
 
-          <div className={`flex-1 p-2 overflow-y-auto transition-colors duration-300 ${isDark ? 'bg-gray-900' : 'bg-zinc-50'}`}>
+          <div className={`flex-1 p-2 overflow-y-auto transition-colors duration-300 ${isDark ? 'bg-zinc-900' : 'bg-zinc-50'}`}>
             <AnimatePresence mode="wait">
               {isLoading ? (
                 <motion.div

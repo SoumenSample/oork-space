@@ -49,7 +49,7 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className={`min-h-screen rounded-2xl border border-gray-300 ${isDark ? "bg-zinc-900 text-white" : "bg-white text-gray-900"}`}>
+    <div className={`min-h-screen rounded-2xl border  ${isDark ? "bg-black border-slate-900 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
       {/* <AppSidebar/> */}
       <SiteHeader/>
       <div className="w-full max-w-7xl mx-auto px-6 py-10 ">
@@ -59,7 +59,7 @@ export default function ProjectPage() {
           <h2 className={`text-sm font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`}>
             Databases
           </h2>
-          <CreateDatabasePopover projectId={projectId} defaultOpen={createDb} />
+          {/* <CreateDatabasePopover projectId={projectId} defaultOpen={createDb} /> */}
         </div>
 
         <div className="mt-6">
