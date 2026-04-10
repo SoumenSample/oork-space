@@ -10,6 +10,7 @@ export default function NocodeAppsPage() {
   const [apps, setApps] = useState<any[]>([]);
   const [name, setName] = useState("My App");
   const [pageActionFor, setPageActionFor] = useState<string | null>(null);
+  const [workflowActionFor, setWorkflowActionFor] = useState<string | null>(null);
 
   const load = async () => {
     const res = await fetch("/api/nocode/apps");
@@ -58,6 +59,44 @@ export default function NocodeAppsPage() {
       }
     } finally {
       setPageActionFor(null);
+    }
+  };
+
+  const openWorkflowPage = async (appId: string, appName: string, forceCreateNew = false) => {
+    const actionKey = `${appId}:${forceCreateNew ? "new" : "open"}`;
+
+    try {
+      setWorkflowActionFor(actionKey);
+      let workflowId: string | undefined;
+
+      if (!forceCreateNew) {
+        const listRes = await fetch(`/api/nocode/workflows?appId=${appId}`, { cache: "no-store" });
+        if (listRes.ok) {
+          const listJson = await listRes.json();
+          workflowId = listJson?.data?.[0]?._id;
+        }
+      }
+
+      if (!workflowId) {
+        const res = await fetch("/api/nocode/workflows", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appId, name: `${appName} Workflow` }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to create workflow (${res.status})`);
+        }
+
+        const json = await res.json();
+        workflowId = json?.data?._id;
+      }
+
+      if (workflowId) {
+        router.push(`/nocode/workflows/${workflowId}`);
+      }
+    } finally {
+      setWorkflowActionFor(null);
     }
   };
 
@@ -137,6 +176,24 @@ export default function NocodeAppsPage() {
                 >
                   <Plus className="h-4 w-4" />
                   {pageActionFor === `${a._id}:new` ? "Creating..." : "Create New Page"}
+                </button>
+
+                <button
+                  onClick={() => void openWorkflowPage(a._id, a.name, false)}
+                  disabled={Boolean(workflowActionFor && workflowActionFor.startsWith(`${a._id}:`))}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 py-2.5 text-sm font-medium text-violet-100 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <WandSparkles className="h-4 w-4" />
+                  {workflowActionFor === `${a._id}:open` ? "Opening..." : "Open Existing Workflow"}
+                </button>
+
+                <button
+                  onClick={() => void openWorkflowPage(a._id, a.name, true)}
+                  disabled={Boolean(workflowActionFor && workflowActionFor.startsWith(`${a._id}:`))}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-600 bg-violet-900/40 px-3 py-2.5 text-sm font-medium text-violet-100 transition hover:bg-violet-800/60 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Plus className="h-4 w-4" />
+                  {workflowActionFor === `${a._id}:new` ? "Creating..." : "Create New Workflow"}
                 </button>
               </div>
             </article>

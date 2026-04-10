@@ -33,15 +33,17 @@ type Props = {
 };
 
 type AppPageItem = { _id: string; name: string; slug: string };
-type WorkflowItem = { _id: string; name: string; key: string; status: string };
+type WorkflowItem = { _id: string; name: string; key: string; status: string; updatedAt?: string };
 type SavedSnippet = { id: string; name: string; html: string; savedAt: number };
 type FormField = {
   id: string;
-  type: "text" | "email" | "number" | "textarea";
+  type: "text" | "email" | "password" | "number" | "tel" | "url" | "date" | "textarea" | "checkbox" | "select";
   name: string;
   label: string;
   placeholder: string;
   required: boolean;
+  checked: boolean;
+  options: string;
   min: string;
   max: string;
 };
@@ -316,6 +318,8 @@ export default function GrapesEditor({
       label: "Email",
       placeholder: "Enter your email",
       required: true,
+      checked: false,
+      options: "",
       min: "",
       max: "",
     },
@@ -593,6 +597,64 @@ export default function GrapesEditor({
     setStatus(`Linked to /p/${slug}`);
   }, []);
 
+  const createWorkflowFromBuilder = useCallback(async () => {
+    if (!appId) {
+      setStatus("Save the page/app first to create workflows");
+      return;
+    }
+
+    try {
+      setStatus("Creating workflow...");
+      const res = await fetch("/api/nocode/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appId, name: `${pageName || "Page"} Workflow` }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to create workflow (${res.status})`);
+      }
+
+      const json = await res.json();
+      const created = json?.data;
+      const createdId = String(created?._id || "");
+      const createdKey = String(created?.key || "");
+      const createdName = String(created?.name || "Untitled");
+
+      if (createdKey) {
+        setFormWorkflowKey(createdKey);
+      }
+
+      if (createdId && createdKey) {
+        setWorkflows((prev) => {
+          const next = [{ _id: createdId, key: createdKey, name: createdName, status: "draft" }, ...prev];
+          const seen = new Set<string>();
+          return next.filter((item) => {
+            if (seen.has(item._id)) return false;
+            seen.add(item._id);
+            return true;
+          });
+        });
+      }
+
+      if (createdId) {
+        window.open(`/nocode/workflows/${createdId}`, "_blank", "noreferrer");
+      }
+      setStatus("Workflow created");
+    } catch {
+      setStatus("Failed to create workflow");
+    }
+  }, [appId, pageName]);
+
+  const openSelectedWorkflowFromBuilder = useCallback(() => {
+    const selected = workflows.find((wf) => wf.key === formWorkflowKey) || workflows[0];
+    if (!selected?._id) {
+      setStatus("No workflow available to open");
+      return;
+    }
+    window.open(`/nocode/workflows/${selected._id}`, "_blank", "noreferrer");
+  }, [formWorkflowKey, workflows]);
+
   const addFormField = useCallback(() => {
     setFormFields((prev) => [
       ...prev,
@@ -603,6 +665,8 @@ export default function GrapesEditor({
         label: "Field",
         placeholder: "",
         required: false,
+        checked: false,
+        options: "Option 1, Option 2, Option 3",
         min: "",
         max: "",
       },
@@ -618,6 +682,22 @@ export default function GrapesEditor({
       const placeholderAttr = field.placeholder.trim()
         ? ` placeholder=\"${field.placeholder.trim()}\"`
         : "";
+
+      if (field.type === "select") {
+        const options = field.options
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const optionsHtml = (options.length ? options : ["Option 1", "Option 2"]).map((option) => (
+          `<option value=\"${option}\">${option}</option>`
+        )).join("");
+        return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<select name=\"${field.name}\"${requiredAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;\">${optionsHtml}</select></label>`;
+      }
+
+      if (field.type === "checkbox") {
+        const checkedAttr = field.checked ? " checked" : "";
+        return `<label style=\"display:flex;align-items:center;gap:8px;font-weight:600;color:#1e293b;\"><input type=\"checkbox\" name=\"${field.name}\"${requiredAttr}${checkedAttr} style=\"width:16px;height:16px;\" />${label}</label>`;
+      }
 
       if (field.type === "textarea") {
         return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<textarea name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;min-height:96px;\"></textarea></label>`;
@@ -1116,6 +1196,7 @@ export default function GrapesEditor({
             name: String(item?.name || "Untitled"),
             key: String(item?.key || ""),
             status: String(item?.status || "draft"),
+            updatedAt: item?.updatedAt ? String(item.updatedAt) : "",
           }));
           setWorkflows(mapped.filter((item: WorkflowItem) => item.key));
         }
@@ -1392,7 +1473,17 @@ export default function GrapesEditor({
 
           {showFormBuilder ? (
             <div className="nocode-form-builder">
-              <h4>Visual Form Builder</h4>
+              <div className="nocode-form-builder-head">
+                <h4>Visual Form Builder</h4>
+                <button
+                  className="nocode-form-builder-close"
+                  onClick={() => setShowFormBuilder(false)}
+                  aria-label="Close form builder"
+                  title="Close"
+                >
+                  x
+                </button>
+              </div>
               <p>Create fields and connect submissions to your workflow.</p>
 
               <label>Workflow</label>
@@ -1402,6 +1493,42 @@ export default function GrapesEditor({
                   <option value={wf.key} key={wf._id}>{wf.name} ({wf.key})</option>
                 ))}
               </select>
+
+              <div className="nocode-form-builder-actions">
+                <button className="nocode-btn nocode-btn-secondary" onClick={() => void createWorkflowFromBuilder()}>Create Workflow</button>
+                <button className="nocode-btn nocode-btn-secondary" onClick={openSelectedWorkflowFromBuilder} disabled={!workflows.length}>Open Workflow</button>
+              </div>
+
+              <div className="nocode-workflow-list">
+                <div className="nocode-workflow-list-head">Available Workflows</div>
+                {workflows.length ? workflows.map((wf) => {
+                  const selected = formWorkflowKey === wf.key;
+                  const updated = wf.updatedAt ? new Date(wf.updatedAt) : null;
+                  const updatedLabel = updated && !Number.isNaN(updated.getTime())
+                    ? updated.toLocaleString()
+                    : "-";
+
+                  return (
+                    <button
+                      key={wf._id}
+                      className={`nocode-workflow-item ${selected ? "active" : ""}`}
+                      onClick={() => setFormWorkflowKey(wf.key)}
+                      type="button"
+                    >
+                      <div className="nocode-workflow-item-top">
+                        <strong>{wf.name}</strong>
+                        <span className={`nocode-workflow-badge ${wf.status === "published" ? "published" : "draft"}`}>
+                          {wf.status}
+                        </span>
+                      </div>
+                      <div className="nocode-workflow-item-meta">{wf.key}</div>
+                      <div className="nocode-workflow-item-meta">Updated: {updatedLabel}</div>
+                    </button>
+                  );
+                }) : (
+                  <p className="nocode-small-helper">No workflows found for this app.</p>
+                )}
+              </div>
 
               <label>Submit Button Label</label>
               <input value={formSubmitLabel} onChange={(e) => setFormSubmitLabel(e.target.value)} placeholder="Submit" />
@@ -1415,14 +1542,31 @@ export default function GrapesEditor({
                     <select value={field.type} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, type: e.target.value as FormField["type"] } : item))}>
                       <option value="text">Text</option>
                       <option value="email">Email</option>
+                      <option value="password">Password</option>
                       <option value="number">Number</option>
+                      <option value="tel">Phone</option>
+                      <option value="url">URL</option>
+                      <option value="date">Date</option>
                       <option value="textarea">Textarea</option>
+                      <option value="checkbox">Checkbox</option>
+                      <option value="select">Dropdown</option>
                     </select>
-                    <input value={field.placeholder} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, placeholder: e.target.value } : item))} placeholder="Placeholder" />
-                    <div className="nocode-inline-grid">
-                      <input value={field.min} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, min: e.target.value } : item))} placeholder="Min" />
-                      <input value={field.max} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, max: e.target.value } : item))} placeholder="Max" />
-                    </div>
+                    {field.type !== "checkbox" && field.type !== "select" ? (
+                      <input value={field.placeholder} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, placeholder: e.target.value } : item))} placeholder="Placeholder" />
+                    ) : null}
+                    {field.type === "select" ? (
+                      <input
+                        value={field.options}
+                        onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, options: e.target.value } : item))}
+                        placeholder="Options (comma separated)"
+                      />
+                    ) : null}
+                    {field.type !== "checkbox" && field.type !== "select" && field.type !== "email" && field.type !== "password" && field.type !== "tel" && field.type !== "url" ? (
+                      <div className="nocode-inline-grid">
+                        <input value={field.min} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, min: e.target.value } : item))} placeholder="Min" />
+                        <input value={field.max} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, max: e.target.value } : item))} placeholder="Max" />
+                      </div>
+                    ) : null}
                     <label className="nocode-checkbox-row">
                       <input
                         type="checkbox"
@@ -1431,6 +1575,16 @@ export default function GrapesEditor({
                       />
                       Required
                     </label>
+                    {field.type === "checkbox" ? (
+                      <label className="nocode-checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={field.checked}
+                          onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, checked: e.target.checked } : item))}
+                        />
+                        Checked by default
+                      </label>
+                    ) : null}
                   </div>
                 ))}
               </div>
