@@ -277,12 +277,12 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <p className="signup-row">
+        {/* <p className="signup-row">
           Don&apos;t have an account?
           <Link href="/signup" className="signup-link">
             Create one →
           </Link>
-        </p>
+        </p> */}
       </div>
 
       <style jsx>{`

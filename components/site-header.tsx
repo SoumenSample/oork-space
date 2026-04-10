@@ -114,7 +114,7 @@ export function SiteHeader() {
                         </div> 
                     </div>
            {/* Logout */}
-           {/* <button
+            {/* <button
              onClick={logout}
              className="relative px-4 py-3 rounded-xl font-semibold text-sm text-white
                bg-linear-to-br from-rose-500 via-pink-500 to-purple-500
@@ -128,7 +128,7 @@ export function SiteHeader() {
                <LogOut size={16} />
                Logout
              </span>
-           </button> */}
+           </button>  */}
            
           </div>
     </header>
