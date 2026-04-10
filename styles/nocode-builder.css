@@ -1,0 +1,221 @@
+.nocode-builder-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 160px);
+}
+
+.nocode-builder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #0b1326 0%, #0f1b35 100%);
+}
+
+.nocode-toolbar-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nocode-toolbar-title {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.nocode-toolbar-status {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.nocode-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nocode-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.nocode-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.nocode-btn-primary {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #052e16;
+}
+
+.nocode-btn-secondary {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+
+.nocode-builder-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 230px minmax(0, 1fr) 280px;
+}
+
+.nocode-panel {
+  min-height: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nocode-panel h3 {
+  margin: 0;
+  padding: 10px 12px;
+  color: #cbd5e1;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.nocode-pane-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.nocode-canvas-wrap {
+  min-height: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #cbd5e1 0%, #e2e8f0 100%);
+  overflow: hidden;
+}
+
+.nocode-canvas-host {
+  height: 100%;
+}
+
+.nocode-canvas-host .gjs-cv-canvas {
+  position: relative !important;
+  padding: 0 !important;
+  background: #e2e8f0 !important;
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.nocode-canvas-host .gjs-frame-wrapper {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  height: 100% !important;
+}
+
+.nocode-canvas-host .gjs-frame {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: calc(100vh - 280px) !important;
+  background: #ffffff;
+}
+
+.nocode-canvas-host .gjs-editor {
+  border: none;
+}
+
+.nocode-canvas-host .gjs-one-bg {
+  background: #0f172a;
+}
+
+.nocode-canvas-host .gjs-two-color {
+  color: #cbd5e1;
+}
+
+.nocode-canvas-host .gjs-three-bg {
+  background: #1f2937;
+}
+
+.nocode-canvas-host .gjs-four-color,
+.nocode-canvas-host .gjs-four-color-h:hover {
+  color: #e2e8f0;
+}
+
+.nocode-canvas-host .gjs-block {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: #1f2937;
+  color: #e2e8f0;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.nocode-canvas-host .gjs-block:hover {
+  border-color: #38bdf8;
+  background: #243244;
+}
+
+.nocode-canvas-host .gjs-sm-sector-title,
+.nocode-canvas-host .gjs-sm-label,
+.nocode-canvas-host .gjs-trt-trait__label {
+  color: #cbd5e1;
+}
+
+.nocode-canvas-host .gjs-sm-sector {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.nocode-canvas-host .gjs-field,
+.nocode-canvas-host .gjs-input-holder input,
+.nocode-canvas-host .gjs-input-holder select,
+.nocode-canvas-host .gjs-trt-trait input,
+.nocode-canvas-host .gjs-trt-trait select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+}
+
+@media (max-width: 1420px) {
+  .nocode-builder-grid {
+    grid-template-columns: 210px minmax(0, 1fr) 250px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .nocode-builder-shell {
+    height: auto;
+  }
+
+  .nocode-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nocode-panel,
+  .nocode-canvas-wrap {
+    min-height: 380px;
+  }
+}

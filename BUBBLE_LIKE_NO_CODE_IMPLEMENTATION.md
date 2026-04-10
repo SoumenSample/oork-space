@@ -62,15 +62,11 @@ app/
     nocode/
       apps/
         route.ts
-      apps/[appId]/
-        route.ts
       pages/
         route.ts
       pages/[id]/
         route.ts
       pages/[id]/publish/
-        route.ts
-      pages/slug/[slug]/
         route.ts
       workflows/
         route.ts
@@ -101,10 +97,8 @@ components/
   nocode/
     grapes/
       GrapesEditor.tsx
-      blockDefinitions.ts
     workflow/
       WorkflowEditor.tsx
-      nodeRegistry.ts
 
 lib/
   models/
