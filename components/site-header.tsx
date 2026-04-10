@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { LogOut, Menu, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes";
+import { usePathname } from "next/navigation";
 import { useAuth } from "./AuthContext";
-import { useState } from "react";
 
 export function SiteHeader() {
   const { setTheme ,resolvedTheme } = useTheme();
   const { logout } = useAuth();
+  const pathname = usePathname();
   const isDark = resolvedTheme === "dark";
 
   // const [showSharePopover, setShowSharePopover] = useState(false);
@@ -18,6 +19,10 @@ export function SiteHeader() {
   const toggleSidebar = () => {
     window.dispatchEvent(new Event("oork-toggle-sidebar"));
   };
+
+  const sectionTitle = pathname.startsWith("/nocode")
+    ? "Website Builder"
+    : "Dashboard Section";
 
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -30,7 +35,7 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 data-[orientation=vertical]:h-4"
         />
-        <h1 className="text-base font-medium">Dashboard Section</h1>
+        <h1 className="text-base font-medium">{sectionTitle}</h1>
       </div>
       <div className="flex items-center gap-4">
           <div>

@@ -1,12 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import grapesjs from "grapesjs";
-import "grapesjs/dist/css/grapes.min.css";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@/styles/nocode-builder.css";
 
+type SeoDraft = {
+  title: string;
+  description: string;
+  ogTitle: string;
+  ogDescription: string;
+  ogImage: string;
+};
+
 type Props = {
+  pageId?: string;
+  pageUpdatedAt?: string;
   initialProjectData?: unknown;
+  initialHtml?: string;
+  initialCss?: string;
+  initialSeo?: Partial<SeoDraft>;
   pageName?: string;
   pageSlug?: string;
   appId?: string;
@@ -16,8 +27,23 @@ type Props = {
     css: string;
     js: string;
     bindings: Array<Record<string, unknown>>;
+    seo: SeoDraft;
   }) => Promise<void>;
   onPublish: () => Promise<void>;
+};
+
+type AppPageItem = { _id: string; name: string; slug: string };
+type WorkflowItem = { _id: string; name: string; key: string; status: string };
+type SavedSnippet = { id: string; name: string; html: string; savedAt: number };
+type FormField = {
+  id: string;
+  type: "text" | "email" | "number" | "textarea";
+  name: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  min: string;
+  max: string;
 };
 
 const DEFAULT_HTML = `
@@ -69,6 +95,155 @@ function normalizeProjectData(data: unknown): Record<string, unknown> | null {
   return data as Record<string, unknown>;
 }
 
+const EMPTY_SEO: SeoDraft = {
+  title: "",
+  description: "",
+  ogTitle: "",
+  ogDescription: "",
+  ogImage: "",
+};
+
+const DEVICE_OPTIONS = [
+  { id: "desktop", label: "Desktop" },
+  { id: "tablet", label: "Tablet" },
+  { id: "mobile", label: "Mobile" },
+] as const;
+
+const ADVANCED_STYLE_SECTORS: any[] = [
+  {
+    name: "Layout",
+    open: true,
+    properties: [
+      {
+        property: "display",
+        type: "select",
+        defaults: "block",
+        options: [
+          { id: "block", label: "Block" },
+          { id: "inline-block", label: "Inline Block" },
+          { id: "flex", label: "Flex" },
+          { id: "grid", label: "Grid" },
+          { id: "none", label: "Hidden" },
+        ],
+      },
+      {
+        property: "flex-direction",
+        type: "radio",
+        defaults: "row",
+        options: [
+          { id: "row", label: "Row" },
+          { id: "column", label: "Column" },
+        ],
+      },
+      {
+        property: "justify-content",
+        type: "select",
+        options: [
+          { id: "flex-start", label: "Start" },
+          { id: "center", label: "Center" },
+          { id: "flex-end", label: "End" },
+          { id: "space-between", label: "Space Between" },
+          { id: "space-around", label: "Space Around" },
+        ],
+      },
+      {
+        property: "align-items",
+        type: "select",
+        options: [
+          { id: "stretch", label: "Stretch" },
+          { id: "flex-start", label: "Start" },
+          { id: "center", label: "Center" },
+          { id: "flex-end", label: "End" },
+        ],
+      },
+      "position",
+      "top",
+      "right",
+      "left",
+      "bottom",
+    ],
+  },
+  {
+    name: "Spacing & Size",
+    open: false,
+    properties: [
+      "width",
+      "height",
+      "max-width",
+      "min-height",
+      "margin",
+      "padding",
+      {
+        property: "gap",
+        type: "slider",
+        defaults: 0,
+        step: 1,
+        min: 0,
+        max: 80,
+        units: ["px", "rem"],
+      },
+    ],
+  },
+  {
+    name: "Typography",
+    open: false,
+    properties: [
+      {
+        property: "font-size",
+        type: "slider",
+        defaults: 16,
+        min: 8,
+        max: 96,
+        step: 1,
+        units: ["px", "rem"],
+      },
+      {
+        property: "font-weight",
+        type: "select",
+        options: [
+          { id: "300", label: "Light" },
+          { id: "400", label: "Regular" },
+          { id: "500", label: "Medium" },
+          { id: "600", label: "Semi Bold" },
+          { id: "700", label: "Bold" },
+          { id: "800", label: "Extra Bold" },
+        ],
+      },
+      {
+        property: "line-height",
+        type: "slider",
+        defaults: 1.5,
+        min: 0.8,
+        max: 3,
+        step: 0.1,
+        units: ["", "px", "em"],
+      },
+      "letter-spacing",
+      "color",
+      "text-align",
+    ],
+  },
+  {
+    name: "Border & Effects",
+    open: false,
+    properties: [
+      "background-color",
+      "border",
+      {
+        property: "border-radius",
+        type: "slider",
+        defaults: 0,
+        min: 0,
+        max: 80,
+        step: 1,
+        units: ["px", "%"],
+      },
+      "box-shadow",
+      "opacity",
+    ],
+  },
+];
+
 const TEXT_EDITABLE_TAGS = new Set([
   "a",
   "button",
@@ -89,7 +264,12 @@ function isTextEditableTag(tagName: unknown): boolean {
 }
 
 export default function GrapesEditor({
+  pageId,
+  pageUpdatedAt,
   initialProjectData,
+  initialHtml,
+  initialCss,
+  initialSeo,
   pageName,
   pageSlug,
   appId,
@@ -97,14 +277,94 @@ export default function GrapesEditor({
   onPublish,
 }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const editorRef = useRef<ReturnType<typeof grapesjs.init> | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
+  const floatingInspectorRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<any>(null);
   const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localBackupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const enforceIntervalRef = useRef<number | null>(null);
   const savingRef = useRef(false);
+  const keyHandlerRef = useRef<((e: KeyboardEvent) => void) | null>(null);
 
   const [status, setStatus] = useState("Ready");
   const [isPublishing, setIsPublishing] = useState(false);
   const [isImageSelected, setIsImageSelected] = useState(false);
+  const [activeDevice, setActiveDevice] = useState("desktop");
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [historyDepth, setHistoryDepth] = useState(0);
+  const [appPages, setAppPages] = useState<AppPageItem[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
+  const [savedSnippets, setSavedSnippets] = useState<SavedSnippet[]>([]);
+  const [selectedPageSlug, setSelectedPageSlug] = useState("");
+  const [leftPanelMode, setLeftPanelMode] = useState<"builder" | "responsive">("builder");
+  const [elementSearch, setElementSearch] = useState("");
+  const [assetSearch, setAssetSearch] = useState("");
+  const [seo, setSeo] = useState<SeoDraft>({ ...EMPTY_SEO, ...initialSeo });
+  const [showFormBuilder, setShowFormBuilder] = useState(false);
+  const [formWorkflowKey, setFormWorkflowKey] = useState("");
+  const [formSubmitLabel, setFormSubmitLabel] = useState("Submit");
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
+  const [showFloatingInspector, setShowFloatingInspector] = useState(false);
+  const [floatingInspectorTab, setFloatingInspectorTab] = useState<"properties" | "styles">("properties");
+  const [floatingInspectorPosition, setFloatingInspectorPosition] = useState<{ x: number; y: number } | null>(null);
+  const [formFields, setFormFields] = useState<FormField[]>([
+    {
+      id: `field-${Date.now()}`,
+      type: "email",
+      name: "email",
+      label: "Email",
+      placeholder: "Enter your email",
+      required: true,
+      min: "",
+      max: "",
+    },
+  ]);
+
+  const localDraftKey = useMemo(() => {
+    if (!pageId) return "";
+    return `nocode:draft:${pageId}`;
+  }, [pageId]);
+
+  const snippetsKey = useMemo(() => {
+    if (!appId) return "";
+    return `nocode:snippets:${appId}`;
+  }, [appId]);
+
+  const filteredSnippets = useMemo(() => {
+    const query = assetSearch.trim().toLowerCase();
+    if (!query) return savedSnippets;
+    return savedSnippets.filter((item) => item.name.toLowerCase().includes(query));
+  }, [assetSearch, savedSnippets]);
+
+  const syncUndoState = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const um = editor.UndoManager as any;
+    setCanUndo(Boolean(um?.hasUndo?.()));
+    setCanRedo(Boolean(um?.hasRedo?.()));
+    const stack = um?.getStack?.() || [];
+    setHistoryDepth(Array.isArray(stack) ? stack.length : 0);
+  }, []);
+
+  const persistLocalSnapshot = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor || !localDraftKey) return;
+
+    try {
+      const snapshot = {
+        grapesProjectData: editor.getProjectData(),
+        html: editor.getHtml(),
+        css: editor.getCss() || "",
+        js: editor.getJs() || "",
+        seo,
+        savedAt: Date.now(),
+      };
+      window.localStorage.setItem(localDraftKey, JSON.stringify(snapshot));
+    } catch {
+      // Ignore local backup failures.
+    }
+  }, [localDraftKey, seo]);
 
   const forceCanvasFill = useCallback(() => {
     const root = rootRef.current;
@@ -187,10 +447,12 @@ export default function GrapesEditor({
     const fillStyleId = "wb-canvas-fill-style";
     let fillStyle = frameDoc.getElementById(fillStyleId) as HTMLStyleElement | null;
     if (!fillStyle) {
-      fillStyle = frameDoc.createElement("style");
-      fillStyle.id = fillStyleId;
-      frameDoc.head.appendChild(fillStyle);
+      const createdStyle = frameDoc.createElement("style");
+      createdStyle.id = fillStyleId;
+      frameDoc.head?.appendChild(createdStyle);
+      fillStyle = createdStyle;
     }
+    if (!fillStyle) return;
     fillStyle.textContent = `
       html, body { width: 100% !important; min-width: 100% !important; height: 100% !important; min-height: 100% !important; margin: 0 !important; }
       body > *:first-child { width: 100% !important; max-width: none !important; margin-left: 0 !important; margin-right: 0 !important; box-sizing: border-box !important; }
@@ -205,12 +467,30 @@ export default function GrapesEditor({
       savingRef.current = true;
       setStatus("Saving draft...");
 
-      await onSave({
+      const snapshot = {
         grapesProjectData: editor.getProjectData(),
         html: editor.getHtml(),
         css: editor.getCss() || "",
         js: editor.getJs() || "",
+        seo,
+        savedAt: Date.now(),
+      };
+
+      if (localDraftKey) {
+        try {
+          window.localStorage.setItem(localDraftKey, JSON.stringify(snapshot));
+        } catch {
+          // Ignore local backup failures.
+        }
+      }
+
+      await onSave({
+        grapesProjectData: snapshot.grapesProjectData,
+        html: snapshot.html,
+        css: snapshot.css,
+        js: snapshot.js,
         bindings: [],
+        seo: snapshot.seo,
       });
 
       setStatus(`Draft saved at ${new Date().toLocaleTimeString()}`);
@@ -219,7 +499,143 @@ export default function GrapesEditor({
     } finally {
       savingRef.current = false;
     }
-  }, [onSave]);
+  }, [localDraftKey, onSave, seo]);
+
+  const loadSavedSnippets = useCallback(() => {
+    if (!snippetsKey) return;
+    try {
+      const raw = window.localStorage.getItem(snippetsKey);
+      if (!raw) {
+        setSavedSnippets([]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setSavedSnippets([]);
+        return;
+      }
+
+      setSavedSnippets(parsed.filter((item) => item && typeof item === "object") as SavedSnippet[]);
+    } catch {
+      setSavedSnippets([]);
+    }
+  }, [snippetsKey]);
+
+  const saveSnippets = useCallback((snippets: SavedSnippet[]) => {
+    setSavedSnippets(snippets);
+    if (!snippetsKey) return;
+    try {
+      window.localStorage.setItem(snippetsKey, JSON.stringify(snippets));
+    } catch {
+      // Ignore local save issues.
+    }
+  }, [snippetsKey]);
+
+  const saveSelectedAsReusableComponent = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const selected = editor.getSelected();
+    if (!selected) {
+      setStatus("Select a section first");
+      return;
+    }
+
+    const name = window.prompt("Reusable component name", "New Section");
+    if (!name) return;
+
+    const html = selected.toHTML?.() || "";
+    if (!html.trim()) {
+      setStatus("Unable to save this selection");
+      return;
+    }
+
+    const next: SavedSnippet = {
+      id: `snippet-${Date.now()}`,
+      name: name.trim(),
+      html,
+      savedAt: Date.now(),
+    };
+
+    saveSnippets([next, ...savedSnippets].slice(0, 30));
+    setStatus("Reusable component saved");
+  }, [saveSnippets, savedSnippets]);
+
+  const insertReusableComponent = useCallback((snippet: SavedSnippet) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.addComponents(snippet.html);
+    setStatus(`Inserted ${snippet.name}`);
+  }, []);
+
+  const linkSelectedElement = useCallback((slug: string) => {
+    const editor = editorRef.current;
+    if (!editor || !slug) return;
+
+    const selected = editor.getSelected();
+    if (!selected) {
+      setStatus("Select a button or link first");
+      return;
+    }
+
+    const tag = String(selected.get("tagName") || "").toLowerCase();
+    if (!["a", "button"].includes(tag)) {
+      setStatus("Select a link or button to connect a page");
+      return;
+    }
+
+    const href = `/p/${slug}`;
+    selected.addAttributes({ href });
+    if (tag === "button") {
+      selected.set("tagName", "a");
+      selected.addAttributes({ role: "button", href });
+    }
+    setStatus(`Linked to /p/${slug}`);
+  }, []);
+
+  const addFormField = useCallback(() => {
+    setFormFields((prev) => [
+      ...prev,
+      {
+        id: `field-${Date.now()}-${prev.length}`,
+        type: "text",
+        name: `field_${prev.length + 1}`,
+        label: "Field",
+        placeholder: "",
+        required: false,
+        min: "",
+        max: "",
+      },
+    ]);
+  }, []);
+
+  const buildFormHtml = useCallback(() => {
+    const fieldsHtml = formFields.map((field) => {
+      const requiredAttr = field.required ? " required" : "";
+      const minAttr = field.min.trim() ? ` min=\"${field.min.trim()}\"` : "";
+      const maxAttr = field.max.trim() ? ` max=\"${field.max.trim()}\"` : "";
+      const label = field.label.trim() || field.name;
+      const placeholderAttr = field.placeholder.trim()
+        ? ` placeholder=\"${field.placeholder.trim()}\"`
+        : "";
+
+      if (field.type === "textarea") {
+        return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<textarea name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;min-height:96px;\"></textarea></label>`;
+      }
+
+      return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<input type=\"${field.type}\" name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;\" /></label>`;
+    }).join("");
+
+    return `<form data-workflow-key=\"${formWorkflowKey}\" data-app-id=\"${appId || ""}\" style=\"display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;\">${fieldsHtml}<button type=\"submit\" style=\"padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;\">${formSubmitLabel || "Submit"}</button></form>`;
+  }, [appId, formFields, formSubmitLabel, formWorkflowKey]);
+
+  const insertBuiltForm = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.addComponents(buildFormHtml());
+    setShowFormBuilder(false);
+    setStatus("Custom form inserted");
+  }, [buildFormHtml]);
 
   const runPublish = useCallback(async () => {
     try {
@@ -238,8 +654,18 @@ export default function GrapesEditor({
   useEffect(() => {
     if (!rootRef.current || editorRef.current) return;
 
-    const editor = grapesjs.init({
-      container: rootRef.current,
+    let cancelled = false;
+
+    const setup = async () => {
+      await import("grapesjs/dist/css/grapes.min.css");
+      const grapesModule = await import("grapesjs");
+      if (cancelled) return;
+
+      const grapesjs = grapesModule.default;
+      const container = rootRef.current;
+      if (!container) return;
+      const editor = grapesjs.init({
+      container,
       fromElement: false,
       height: "100%",
       width: "auto",
@@ -247,6 +673,8 @@ export default function GrapesEditor({
       deviceManager: {
         devices: [
           { id: "desktop", name: "Desktop", width: "" },
+          { id: "tablet", name: "Tablet", width: "768px", widthMedia: "992px" },
+          { id: "mobile", name: "Mobile", width: "375px", widthMedia: "576px" },
         ],
       },
       panels: { defaults: [] },
@@ -255,12 +683,7 @@ export default function GrapesEditor({
       },
       styleManager: {
         appendTo: "#gjs-styles",
-        sectors: [
-          { name: "Layout", open: true, properties: ["display", "position", "top", "right", "left", "bottom"] },
-          { name: "Dimension", open: false, properties: ["width", "height", "max-width", "min-height", "margin", "padding"] },
-          { name: "Typography", open: false, properties: ["font-size", "font-weight", "line-height", "letter-spacing", "color", "text-align"] },
-          { name: "Decorations", open: false, properties: ["background-color", "border", "border-radius", "box-shadow", "opacity"] },
-        ],
+        sectors: ADVANCED_STYLE_SECTORS,
       },
       layerManager: {
         appendTo: "#gjs-layers",
@@ -277,7 +700,7 @@ export default function GrapesEditor({
       },
     });
 
-    editor.Commands.add("wb-edit-text", {
+      editor.Commands.add("wb-edit-text", {
       run(ed) {
         const component = ed.getSelected();
         if (!component) return;
@@ -290,7 +713,7 @@ export default function GrapesEditor({
       },
     });
 
-    editor.Commands.add("wb-change-image", {
+      editor.Commands.add("wb-change-image", {
       run(ed) {
         const component = ed.getSelected();
         if (!component) return;
@@ -307,7 +730,7 @@ export default function GrapesEditor({
       },
     });
 
-    editor.Commands.add("wb-upload-image", {
+      editor.Commands.add("wb-upload-image", {
       async run(ed) {
         const component = ed.getSelected();
         if (!component) return;
@@ -352,7 +775,7 @@ export default function GrapesEditor({
       },
     });
 
-    const applyEditToolbar = (component: any) => {
+      const applyEditToolbar = (component: any) => {
       const tag = String(component?.get?.("tagName") || "").toLowerCase();
       const toolbar = Array.isArray(component?.get?.("toolbar")) ? [...component.get("toolbar")] : [];
 
@@ -380,20 +803,22 @@ export default function GrapesEditor({
       component.set("toolbar", toolbar);
     };
 
-    editor.on("component:selected", (component: any) => {
+      editor.on("component:selected", (component: any) => {
       if (!component) return;
       applyEditToolbar(component);
 
       const tag = String(component.get("tagName") || "").toLowerCase();
       setIsImageSelected(tag === "img");
+      setShowFloatingInspector(true);
       if (tag === "img") {
         component.set("traits", ["alt", { type: "text", name: "src", label: "Image URL" }]);
       }
     });
 
-    editor.on("component:dblclick", (component: any) => {
+      editor.on("component:dblclick", (component: any) => {
       const tag = String(component?.get?.("tagName") || "").toLowerCase();
       editor.select(component);
+      setShowFloatingInspector(true);
 
       if (isTextEditableTag(tag)) {
         editor.runCommand("wb-edit-text");
@@ -405,91 +830,155 @@ export default function GrapesEditor({
       }
     });
 
-    editor.on("component:deselected", () => {
+      editor.on("component:deselected", () => {
       setIsImageSelected(false);
+      setShowFloatingInspector(false);
     });
 
-    editor.BlockManager.add("navbar", {
-      label: "Navbar",
-      category: "Static Site",
-      content:
-        '<nav class="wb-navbar"><div class="wb-brand">Brand</div><div class="wb-nav-links"><a href="#">Home</a><a href="#">About</a><a href="#">Contact</a></div></nav>',
+    const visualLabel = (icon: string, text: string) =>
+      `<span class="wb-visual-block-label"><span class="wb-visual-block-icon">${icon}</span><span>${text}</span></span>`;
+
+    editor.BlockManager.add("visual-text", {
+      label: visualLabel("T", "Text"),
+      content: '<p style="margin:0;font-size:16px;line-height:1.6;">Add your text here.</p>',
     });
 
-    editor.BlockManager.add("hero", {
-      label: "Hero",
-      category: "Static Site",
-      content:
-        '<section class="wb-hero"><h1>Hero title</h1><p>Hero subtitle</p><a class="wb-btn" href="#">Get Started</a></section>',
+    editor.BlockManager.add("visual-button", {
+      label: visualLabel("[ ]", "Button"),
+      content: '<a class="wb-btn" href="#">Button</a>',
     });
 
-    editor.BlockManager.add("image", {
-      label: "Image",
-      category: "Static Site",
+    editor.BlockManager.add("visual-icon", {
+      label: visualLabel("*", "Icon"),
+      content: '<span style="display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid #cbd5e1;border-radius:10px;font-size:22px;line-height:1;">*</span>',
+    });
+
+    editor.BlockManager.add("visual-link", {
+      label: visualLabel("@", "Link"),
+      content: '<a href="#" style="color:#2563eb;text-decoration:underline;font-weight:600;">Open link</a>',
+    });
+
+    editor.BlockManager.add("visual-image", {
+      label: visualLabel("IMG", "Image"),
       content:
         '<img src="https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1200&auto=format&fit=crop" alt="placeholder" style="max-width:100%;border-radius:14px;"/>',
     });
 
-    editor.BlockManager.add("heading", {
-      label: "Heading",
-      category: "Basic",
-      content: "<h2>Section heading</h2>",
+    editor.BlockManager.add("visual-shape", {
+      label: visualLabel("[]", "Shape"),
+      content: '<div style="width:140px;height:90px;border-radius:14px;background:#dbeafe;border:1px solid #93c5fd;"></div>',
     });
 
-    editor.BlockManager.add("paragraph", {
-      label: "Paragraph",
-      category: "Basic",
-      content: "<p>Write your content here.</p>",
+    editor.BlockManager.add("visual-alert", {
+      label: visualLabel("!", "Alert"),
+      content: '<div role="alert" style="padding:12px 14px;border-radius:12px;border:1px solid #fcd34d;background:#fef3c7;color:#92400e;font-weight:600;">Important alert message</div>',
     });
 
-    editor.BlockManager.add("button", {
-      label: "Button",
-      category: "Basic",
-      content: '<a class="wb-btn" href="#">Click me</a>',
-    });
-
-    editor.BlockManager.add("section", {
-      label: "Section",
-      category: "Basic",
+    editor.BlockManager.add("visual-video", {
+      label: visualLabel("VID", "Video"),
       content:
-        '<section class="wb-rectangle"><h2>Section title</h2><p>Section content</p></section>',
+        '<div style="position:relative;width:100%;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#0f172a;"><iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="Video" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;"></iframe></div>',
     });
 
-    editor.BlockManager.add("form", {
-      label: "Form",
-      category: "Static Site",
+    editor.BlockManager.add("visual-html", {
+      label: visualLabel("</>", "HTML"),
+      content: '<div style="border:1px dashed #94a3b8;border-radius:10px;padding:12px;"><h3 style="margin:0 0 6px;">HTML Block</h3><p style="margin:0;">Edit this block as custom HTML content.</p></div>',
+    });
+
+    editor.BlockManager.add("visual-map", {
+      label: visualLabel("MAP", "Map"),
+      content:
+        '<div style="border-radius:12px;overflow:hidden;border:1px solid #cbd5e1;"><iframe title="Map" src="https://maps.google.com/maps?q=New%20York&t=&z=13&ie=UTF8&iwloc=&output=embed" style="width:100%;height:260px;border:0;"></iframe></div>',
+    });
+
+    editor.BlockManager.add("visual-navbar", {
+      label: visualLabel("NAV", "Navbar"),
+      content:
+        '<nav class="wb-navbar"><div class="wb-brand">Brand</div><div class="wb-nav-links"><a href="#">Home</a><a href="#">About</a><a href="#">Contact</a></div></nav>',
+    });
+
+    editor.BlockManager.add("visual-hero", {
+      label: visualLabel("H", "Hero"),
+      content:
+        '<section class="wb-hero"><h1>Hero title</h1><p>Hero subtitle</p><a class="wb-btn" href="#">Get Started</a></section>',
+    });
+
+    editor.BlockManager.add("visual-form", {
+      label: visualLabel("F", "Form"),
       content:
         `<form data-workflow-key="" data-app-id="${appId || ""}" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
     });
 
-    editor.BlockManager.add("footer", {
-      label: "Footer",
-      category: "Static Site",
+    editor.BlockManager.add("visual-footer", {
+      label: visualLabel("FT", "Footer"),
       content:
         '<footer class="wb-footer"><p>Copyright 2026. All rights reserved.</p></footer>',
     });
 
-    const normalizedProject = normalizeProjectData(initialProjectData);
-    if (normalizedProject) {
+    let localSnapshot: Record<string, unknown> | null = null;
+    if (localDraftKey) {
+      try {
+        const raw = window.localStorage.getItem(localDraftKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            localSnapshot = parsed as Record<string, unknown>;
+          }
+        }
+      } catch {
+        localSnapshot = null;
+      }
+    }
+
+    const normalizedProject = normalizeProjectData(initialProjectData) || normalizeProjectData(localSnapshot?.grapesProjectData);
+
+    const localHtml = typeof localSnapshot?.html === "string" && localSnapshot.html.trim()
+      ? String(localSnapshot.html)
+      : "";
+
+    const serverHtml = typeof initialHtml === "string" && initialHtml.trim()
+      ? initialHtml
+      : "";
+
+    const fallbackHtml = serverHtml || localHtml || DEFAULT_HTML;
+
+    const localCss = typeof localSnapshot?.css === "string" && localSnapshot.css.trim()
+      ? String(localSnapshot.css)
+      : "";
+
+    const serverCss = typeof initialCss === "string" && initialCss.trim()
+      ? initialCss
+      : "";
+
+    const fallbackCss = serverCss || localCss || DEFAULT_CSS;
+
+    const hasPersistedHtml = Boolean(serverHtml || localHtml);
+
+    if (hasPersistedHtml) {
+      editor.setComponents(fallbackHtml);
+      editor.setStyle(fallbackCss);
+    } else if (normalizedProject) {
       try {
         editor.loadProjectData(normalizedProject);
       } catch {
-        editor.setComponents(DEFAULT_HTML);
-        editor.setStyle(DEFAULT_CSS);
+        editor.setComponents(fallbackHtml);
+        editor.setStyle(fallbackCss);
       }
     } else {
-      editor.setComponents(DEFAULT_HTML);
-      editor.setStyle(DEFAULT_CSS);
+      editor.setComponents(fallbackHtml);
+      editor.setStyle(fallbackCss);
     }
 
-    editor.setDevice("desktop");
+      editor.setDevice("desktop");
+      setActiveDevice("desktop");
+      syncUndoState();
     forceCanvasFill();
     setTimeout(() => forceCanvasFill(), 0);
     setTimeout(() => forceCanvasFill(), 100);
     setTimeout(() => forceCanvasFill(), 350);
     setTimeout(() => forceCanvasFill(), 800);
 
-    if (enforceIntervalRef.current) {
+      if (enforceIntervalRef.current) {
       window.clearInterval(enforceIntervalRef.current);
     }
     enforceIntervalRef.current = window.setInterval(() => {
@@ -499,16 +988,24 @@ export default function GrapesEditor({
     const onWindowResize = () => forceCanvasFill();
     window.addEventListener("resize", onWindowResize);
 
-    editor.on("load", () => {
+      editor.on("load", () => {
       editor.setDevice("desktop");
+      setActiveDevice("desktop");
       forceCanvasFill();
     });
 
-    editor.on("canvas:frame:load", () => {
+      editor.on("canvas:frame:load", () => {
       forceCanvasFill();
     });
 
-    editor.on("update", () => {
+      editor.on("update", () => {
+      if (localBackupRef.current) {
+        clearTimeout(localBackupRef.current);
+      }
+      localBackupRef.current = setTimeout(() => {
+        persistLocalSnapshot();
+      }, 180);
+
       if (autosaveRef.current) {
         clearTimeout(autosaveRef.current);
       }
@@ -518,11 +1015,62 @@ export default function GrapesEditor({
         void runSave();
         forceCanvasFill();
       }, 1200);
+
+      syncUndoState();
     });
 
-    editorRef.current = editor;
+      editor.on("run:core:undo", () => syncUndoState());
+      editor.on("run:core:redo", () => syncUndoState());
+
+      const onKeyDown = (event: KeyboardEvent) => {
+        const isMod = event.ctrlKey || event.metaKey;
+        if (!isMod) return;
+
+        const key = event.key.toLowerCase();
+        if (key === "z" && !event.shiftKey) {
+          event.preventDefault();
+          editor.UndoManager.undo();
+          syncUndoState();
+        }
+
+        if ((key === "z" && event.shiftKey) || key === "y") {
+          event.preventDefault();
+          editor.UndoManager.redo();
+          syncUndoState();
+        }
+      };
+      keyHandlerRef.current = onKeyDown;
+      window.addEventListener("keydown", onKeyDown);
+
+      editorRef.current = editor;
+
+      const flushLocalOnUnload = () => {
+      persistLocalSnapshot();
+    };
+    window.addEventListener("beforeunload", flushLocalOnUnload);
+    window.addEventListener("pagehide", flushLocalOnUnload);
+
+      return () => {
+        if (keyHandlerRef.current) {
+          window.removeEventListener("keydown", keyHandlerRef.current);
+          keyHandlerRef.current = null;
+        }
+        window.removeEventListener("beforeunload", flushLocalOnUnload);
+        window.removeEventListener("pagehide", flushLocalOnUnload);
+        editor.destroy();
+      };
+    };
+
+    let destroyEditor: (() => void) | undefined;
+    void setup().then((cleanup) => {
+      destroyEditor = cleanup;
+    });
 
     return () => {
+      cancelled = true;
+      if (localBackupRef.current) {
+        clearTimeout(localBackupRef.current);
+      }
       if (autosaveRef.current) {
         clearTimeout(autosaveRef.current);
       }
@@ -530,19 +1078,127 @@ export default function GrapesEditor({
         window.clearInterval(enforceIntervalRef.current);
         enforceIntervalRef.current = null;
       }
-      window.removeEventListener("resize", onWindowResize);
-      editor.destroy();
+      destroyEditor?.();
       editorRef.current = null;
     };
-  }, [appId, forceCanvasFill, initialProjectData, runSave]);
+  }, [appId, forceCanvasFill, initialCss, initialHtml, initialProjectData, localDraftKey, pageUpdatedAt, persistLocalSnapshot, runSave, syncUndoState]);
+
+  useEffect(() => {
+    setSeo({ ...EMPTY_SEO, ...initialSeo });
+  }, [initialSeo]);
+
+  useEffect(() => {
+    if (!appId) return;
+
+    const load = async () => {
+      try {
+        const [pagesRes, wfRes] = await Promise.all([
+          fetch(`/api/nocode/pages?appId=${appId}`, { cache: "no-store" }),
+          fetch(`/api/nocode/workflows?appId=${appId}`, { cache: "no-store" }),
+        ]);
+
+        if (pagesRes.ok) {
+          const pagesJson = await pagesRes.json();
+          const list = Array.isArray(pagesJson?.data) ? pagesJson.data : [];
+          const mapped = list.map((item: any) => ({
+            _id: String(item?._id || ""),
+            name: String(item?.name || "Untitled"),
+            slug: String(item?.slug || ""),
+          }));
+          setAppPages(mapped.filter((item: AppPageItem) => item.slug));
+        }
+
+        if (wfRes.ok) {
+          const wfJson = await wfRes.json();
+          const list = Array.isArray(wfJson?.data) ? wfJson.data : [];
+          const mapped = list.map((item: any) => ({
+            _id: String(item?._id || ""),
+            name: String(item?.name || "Untitled"),
+            key: String(item?.key || ""),
+            status: String(item?.status || "draft"),
+          }));
+          setWorkflows(mapped.filter((item: WorkflowItem) => item.key));
+        }
+      } catch {
+        // Keep the editor usable even if helper APIs fail.
+      }
+    };
+
+    void load();
+  }, [appId]);
+
+  useEffect(() => {
+    loadSavedSnippets();
+  }, [loadSavedSnippets]);
+
+  useEffect(() => {
+    const container = document.getElementById("gjs-blocks");
+    if (!container) return;
+
+    const query = elementSearch.trim().toLowerCase();
+    const blockNodes = Array.from(container.querySelectorAll(".gjs-block"));
+
+    blockNodes.forEach((node) => {
+      const el = node as HTMLElement;
+      const label = (el.textContent || "").toLowerCase();
+      el.style.display = !query || label.includes(query) ? "" : "none";
+    });
+  }, [elementSearch]);
 
   const undo = () => {
     editorRef.current?.UndoManager.undo();
+    syncUndoState();
   };
 
   const redo = () => {
     editorRef.current?.UndoManager.redo();
+    syncUndoState();
   };
+
+  const switchDevice = (device: string) => {
+    editorRef.current?.setDevice(device);
+    setActiveDevice(device);
+    forceCanvasFill();
+  };
+
+  const beginFloatingInspectorDrag = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button")) return;
+
+    const wrapper = canvasWrapRef.current;
+    const panel = floatingInspectorRef.current;
+    if (!wrapper || !panel) return;
+
+    event.preventDefault();
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+
+    const initialX = floatingInspectorPosition?.x ?? (panelRect.left - wrapperRect.left);
+    const initialY = floatingInspectorPosition?.y ?? (panelRect.top - wrapperRect.top);
+
+    const offsetX = event.clientX - (wrapperRect.left + initialX);
+    const offsetY = event.clientY - (wrapperRect.top + initialY);
+
+    const maxX = Math.max(8, wrapper.clientWidth - panel.offsetWidth - 8);
+    const maxY = Math.max(8, wrapper.clientHeight - panel.offsetHeight - 8);
+
+    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const nextX = clamp(moveEvent.clientX - wrapperRect.left - offsetX, 8, maxX);
+      const nextY = clamp(moveEvent.clientY - wrapperRect.top - offsetY, 8, maxY);
+      setFloatingInspectorPosition({ x: nextX, y: nextY });
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [floatingInspectorPosition]);
 
   return (
     <div className="nocode-builder-shell">
@@ -550,11 +1206,13 @@ export default function GrapesEditor({
         <div className="nocode-toolbar-title-wrap">
           <h2 className="nocode-toolbar-title">{pageName || "Website Builder"}</h2>
           <p className="nocode-toolbar-status">{status}</p>
+          <p className="nocode-toolbar-hint">Use drag-and-drop blocks and tweak styles from the right panel.</p>
         </div>
 
         <div className="nocode-toolbar-actions">
-          <button className="nocode-btn nocode-btn-secondary" onClick={undo}>Undo</button>
-          <button className="nocode-btn nocode-btn-secondary" onClick={redo}>Redo</button>
+          <button className="nocode-btn nocode-btn-secondary" onClick={undo} disabled={!canUndo} title="Undo last change (Ctrl/Cmd+Z)">Undo</button>
+          <button className="nocode-btn nocode-btn-secondary" onClick={redo} disabled={!canRedo} title="Redo last undone change (Ctrl/Cmd+Shift+Z)">Redo</button>
+          <span className="nocode-history-pill" title="Tracked edit history">History: {historyDepth}</span>
           {isImageSelected ? (
             <>
               <button className="nocode-btn nocode-btn-secondary" onClick={() => editorRef.current?.runCommand("wb-change-image")}>
@@ -565,6 +1223,12 @@ export default function GrapesEditor({
               </button>
             </>
           ) : null}
+          <button className="nocode-btn nocode-btn-secondary" onClick={saveSelectedAsReusableComponent} title="Save selected section for reuse">
+            Save Component
+          </button>
+          <button className="nocode-btn nocode-btn-secondary" onClick={() => setShowFormBuilder((v) => !v)} title="Build and insert custom forms visually">
+            Form Builder
+          </button>
           {pageSlug ? (
             <a className="nocode-btn nocode-btn-secondary" href={`/p/${pageSlug}`} target="_blank" rel="noreferrer">
               Open Live
@@ -579,25 +1243,248 @@ export default function GrapesEditor({
         </div>
       </div>
 
-      <div className="nocode-builder-grid">
+      <div className={`nocode-builder-grid ${isRightSidebarCollapsed ? "right-collapsed" : ""}`}>
         <aside className="nocode-panel nocode-panel-left">
-          <h3>Blocks</h3>
-          <div id="gjs-blocks" className="nocode-pane-scroll" />
+          <div className="nocode-left-tabs" role="tablist" aria-label="Builder panel mode">
+            <button
+              className={`nocode-left-tab ${leftPanelMode === "builder" ? "active" : ""}`}
+              onClick={() => setLeftPanelMode("builder")}
+              role="tab"
+              aria-selected={leftPanelMode === "builder"}
+            >
+              Builder
+            </button>
+            <button
+              className={`nocode-left-tab ${leftPanelMode === "responsive" ? "active" : ""}`}
+              onClick={() => setLeftPanelMode("responsive")}
+              role="tab"
+              aria-selected={leftPanelMode === "responsive"}
+            >
+              Responsive
+            </button>
+          </div>
 
-          <h3>Layers</h3>
-          <div id="gjs-layers" className="nocode-pane-scroll" />
+          {leftPanelMode === "responsive" ? (
+            <section className="nocode-left-group">
+              <div className="nocode-left-group-head">
+                <strong>Preview Devices</strong>
+              </div>
+              <div className="nocode-device-row nocode-device-row-left">
+                {DEVICE_OPTIONS.map((device) => (
+                  <button
+                    key={device.id}
+                    className={`nocode-chip ${activeDevice === device.id ? "active" : ""}`}
+                    onClick={() => switchDevice(device.id)}
+                  >
+                    {device.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {leftPanelMode !== "responsive" ? (
+            <>
+              <div className="nocode-left-search-row">
+                <input
+                  value={elementSearch}
+                  onChange={(e) => setElementSearch(e.target.value)}
+                  placeholder="Search elements"
+                  aria-label="Search elements"
+                />
+              </div>
+
+              <section className="nocode-left-group">
+                <div className="nocode-left-group-head">
+                  <strong>Elements Tree</strong>
+                  <div className="nocode-left-group-tools" aria-hidden>
+                    <span>O</span>
+                    <span>[]</span>
+                  </div>
+                </div>
+
+                <div className="nocode-left-tree-item">index</div>
+
+                <details className="nocode-left-accordion" open>
+                  <summary>Layers</summary>
+                  <div id="gjs-layers" className="nocode-pane-scroll nocode-left-pane-scroll" />
+                </details>
+              </section>
+
+              <div className="nocode-left-search-row">
+                <input
+                  value={assetSearch}
+                  onChange={(e) => setAssetSearch(e.target.value)}
+                  placeholder="Search assets"
+                  aria-label="Search assets"
+                />
+              </div>
+            </>
+          ) : null}
+
+          <details className="nocode-left-accordion" open>
+            <summary>Visual Elements</summary>
+            <div id="gjs-blocks" className="nocode-pane-scroll nocode-left-pane-scroll" />
+          </details>
+
+          <details className="nocode-left-accordion">
+            <summary>Containers</summary>
+            <p className="nocode-small-helper">Container blocks are available in Visual Elements.</p>
+          </details>
+
+          <details className="nocode-left-accordion">
+            <summary>Input forms</summary>
+            <div className="nocode-left-inline-action">
+              <button className="nocode-btn nocode-btn-secondary" onClick={() => setShowFormBuilder((v) => !v)}>
+                {showFormBuilder ? "Hide Form Builder" : "Open Form Builder"}
+              </button>
+            </div>
+          </details>
+
+          <details className="nocode-left-accordion" open>
+            <summary>Reusable elements</summary>
+            <div className="nocode-pane-scroll nocode-left-pane-scroll nocode-reusable-list">
+              {filteredSnippets.length ? filteredSnippets.map((snippet) => (
+                <div className="nocode-reusable-item" key={snippet.id}>
+                  <span>{snippet.name}</span>
+                  <button className="nocode-btn nocode-btn-secondary" onClick={() => insertReusableComponent(snippet)}>Insert</button>
+                </div>
+              )) : <p className="nocode-small-helper">No reusable elements found.</p>}
+            </div>
+          </details>
         </aside>
 
-        <div className="nocode-canvas-wrap">
+        <div className="nocode-canvas-wrap" ref={canvasWrapRef}>
           <div ref={rootRef} className="nocode-canvas-host" />
+
+          <div
+            ref={floatingInspectorRef}
+            className={`nocode-floating-inspector ${showFloatingInspector ? "open" : ""}`}
+            style={floatingInspectorPosition ? { left: `${floatingInspectorPosition.x}px`, top: `${floatingInspectorPosition.y}px`, right: "auto" } : undefined}
+          >
+            <div className="nocode-floating-inspector-head" onMouseDown={beginFloatingInspectorDrag}>
+              <div className="nocode-floating-inspector-tabs">
+                <button
+                  className={`nocode-floating-tab ${floatingInspectorTab === "properties" ? "active" : ""}`}
+                  onClick={() => setFloatingInspectorTab("properties")}
+                >
+                  Properties
+                </button>
+                <button
+                  className={`nocode-floating-tab ${floatingInspectorTab === "styles" ? "active" : ""}`}
+                  onClick={() => setFloatingInspectorTab("styles")}
+                >
+                  Styles
+                </button>
+              </div>
+              <button className="nocode-floating-close" onClick={() => setShowFloatingInspector(false)} aria-label="Close inspector">
+                x
+              </button>
+            </div>
+
+            <div className={`nocode-floating-pane ${floatingInspectorTab === "properties" ? "active" : ""}`}>
+              <div id="gjs-traits" className="nocode-pane-scroll" />
+            </div>
+            <div className={`nocode-floating-pane ${floatingInspectorTab === "styles" ? "active" : ""}`}>
+              <div id="gjs-styles" className="nocode-pane-scroll" />
+            </div>
+          </div>
+
+          {showFormBuilder ? (
+            <div className="nocode-form-builder">
+              <h4>Visual Form Builder</h4>
+              <p>Create fields and connect submissions to your workflow.</p>
+
+              <label>Workflow</label>
+              <select value={formWorkflowKey} onChange={(e) => setFormWorkflowKey(e.target.value)}>
+                <option value="">No workflow</option>
+                {workflows.map((wf) => (
+                  <option value={wf.key} key={wf._id}>{wf.name} ({wf.key})</option>
+                ))}
+              </select>
+
+              <label>Submit Button Label</label>
+              <input value={formSubmitLabel} onChange={(e) => setFormSubmitLabel(e.target.value)} placeholder="Submit" />
+
+              <div className="nocode-form-fields">
+                {formFields.map((field, index) => (
+                  <div className="nocode-form-field" key={field.id}>
+                    <strong>Field {index + 1}</strong>
+                    <input value={field.label} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, label: e.target.value } : item))} placeholder="Label" />
+                    <input value={field.name} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, name: e.target.value } : item))} placeholder="Name" />
+                    <select value={field.type} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, type: e.target.value as FormField["type"] } : item))}>
+                      <option value="text">Text</option>
+                      <option value="email">Email</option>
+                      <option value="number">Number</option>
+                      <option value="textarea">Textarea</option>
+                    </select>
+                    <input value={field.placeholder} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, placeholder: e.target.value } : item))} placeholder="Placeholder" />
+                    <div className="nocode-inline-grid">
+                      <input value={field.min} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, min: e.target.value } : item))} placeholder="Min" />
+                      <input value={field.max} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, max: e.target.value } : item))} placeholder="Max" />
+                    </div>
+                    <label className="nocode-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={field.required}
+                        onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, required: e.target.checked } : item))}
+                      />
+                      Required
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="nocode-form-builder-actions">
+                <button className="nocode-btn nocode-btn-secondary" onClick={addFormField}>Add Field</button>
+                <button className="nocode-btn nocode-btn-primary" onClick={insertBuiltForm}>Insert Form</button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <aside className="nocode-panel nocode-panel-right">
-          <h3>Properties</h3>
-          <div id="gjs-traits" className="nocode-pane-scroll" />
+        <aside className={`nocode-panel nocode-panel-right ${isRightSidebarCollapsed ? "collapsed" : ""}`}>
+          <button
+            className="nocode-right-collapse-btn"
+            onClick={() => setIsRightSidebarCollapsed((v) => !v)}
+            aria-label={isRightSidebarCollapsed ? "Expand side panel" : "Collapse side panel"}
+            title={isRightSidebarCollapsed ? "Expand" : "Collapse"}
+          >
+            {isRightSidebarCollapsed ? "<" : ">"}
+          </button>
 
-          <h3>Styles</h3>
-          <div id="gjs-styles" className="nocode-pane-scroll" />
+          <div className="nocode-right-content">
+            <h3>Page Linking</h3>
+            <div className="nocode-pane-scroll">
+              <select className="nocode-full-width" value={selectedPageSlug} onChange={(e) => setSelectedPageSlug(e.target.value)}>
+                <option value="">Select page</option>
+                {appPages.map((page) => (
+                  <option key={page._id} value={page.slug}>{page.name} ({page.slug})</option>
+                ))}
+              </select>
+              <button
+                className="nocode-btn nocode-btn-secondary nocode-full-width"
+                onClick={() => linkSelectedElement(selectedPageSlug)}
+                disabled={!selectedPageSlug}
+              >
+                Link Selected Element
+              </button>
+            </div>
+
+            <h3>SEO</h3>
+            <div className="nocode-pane-scroll nocode-seo-panel">
+              <label>Page Title</label>
+              <input value={seo.title} onChange={(e) => setSeo((prev) => ({ ...prev, title: e.target.value }))} />
+              <label>Meta Description</label>
+              <textarea value={seo.description} onChange={(e) => setSeo((prev) => ({ ...prev, description: e.target.value }))} rows={2} />
+              <label>OG Title</label>
+              <input value={seo.ogTitle} onChange={(e) => setSeo((prev) => ({ ...prev, ogTitle: e.target.value }))} />
+              <label>OG Description</label>
+              <textarea value={seo.ogDescription} onChange={(e) => setSeo((prev) => ({ ...prev, ogDescription: e.target.value }))} rows={2} />
+              <label>OG Image URL</label>
+              <input value={seo.ogImage} onChange={(e) => setSeo((prev) => ({ ...prev, ogImage: e.target.value }))} placeholder="https://..." />
+            </div>
+          </div>
         </aside>
       </div>
     </div>

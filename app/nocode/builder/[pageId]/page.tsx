@@ -24,9 +24,17 @@ export default function NocodeBuilderPage() {
 
     const load = async () => {
       try {
-        const res = await fetch(`/api/nocode/pages/${pageId}`);
+        const res = await fetch(`/api/nocode/pages/${pageId}`, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Failed to load page (${res.status})`);
+        }
         const json = await res.json();
+        if (!json?.success) {
+          throw new Error("Failed to load page data");
+        }
         setPage(json?.data || null);
+      } catch {
+        setPage(null);
       } finally {
         setLoading(false);
       }
@@ -43,19 +51,41 @@ export default function NocodeBuilderPage() {
       <SiteHeader />
       <div style={{ padding: 12 }}>
         <GrapesEditor
+          pageId={pageId}
           initialProjectData={page?.draft?.grapesProjectData}
+          initialHtml={page?.draft?.html}
+          initialCss={page?.draft?.css}
+          initialSeo={page?.draft?.seo}
+          pageUpdatedAt={page?.updatedAt}
           pageName={page?.name}
           pageSlug={page?.slug}
           appId={String(page?.appId || "")}
           onSave={async (draft) => {
-            await fetch(`/api/nocode/pages/${pageId}`, {
+            const res = await fetch(`/api/nocode/pages/${pageId}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ draft }),
             });
+
+            if (!res.ok) {
+              throw new Error(`Failed to save draft (${res.status})`);
+            }
+
+            const json = await res.json();
+            if (!json?.success) {
+              throw new Error("Failed to save draft");
+            }
           }}
           onPublish={async () => {
-            await fetch(`/api/nocode/pages/${pageId}/publish`, { method: "POST" });
+            const res = await fetch(`/api/nocode/pages/${pageId}/publish`, { method: "POST" });
+            if (!res.ok) {
+              throw new Error(`Failed to publish page (${res.status})`);
+            }
+
+            const json = await res.json();
+            if (!json?.success) {
+              throw new Error("Failed to publish page");
+            }
             alert("Published");
           }}
         />

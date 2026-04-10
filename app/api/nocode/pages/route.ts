@@ -33,6 +33,13 @@ export async function POST(req: Request) {
         css: "",
         js: "",
         bindings: [],
+        seo: {
+          title: "",
+          description: "",
+          ogTitle: "",
+          ogDescription: "",
+          ogImage: "",
+        },
       },
       published: {
         grapesProjectData: null,
@@ -40,6 +47,13 @@ export async function POST(req: Request) {
         css: "",
         js: "",
         bindings: [],
+        seo: {
+          title: "",
+          description: "",
+          ogTitle: "",
+          ogDescription: "",
+          ogImage: "",
+        },
         version: 0,
         publishedAt: null,
       },

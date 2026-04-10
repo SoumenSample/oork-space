@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
 
+const SeoSchema = new mongoose.Schema(
+  {
+    title: { type: String, default: "" },
+    description: { type: String, default: "" },
+    ogTitle: { type: String, default: "" },
+    ogDescription: { type: String, default: "" },
+    ogImage: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const NocodePageSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, index: true },
@@ -14,6 +25,7 @@ const NocodePageSchema = new mongoose.Schema(
       css: { type: String, default: "" },
       js: { type: String, default: "" },
       bindings: { type: mongoose.Schema.Types.Mixed, default: [] },
+      seo: { type: SeoSchema, default: () => ({}) },
     },
 
     published: {
@@ -22,6 +34,7 @@ const NocodePageSchema = new mongoose.Schema(
       css: { type: String, default: "" },
       js: { type: String, default: "" },
       bindings: { type: mongoose.Schema.Types.Mixed, default: [] },
+      seo: { type: SeoSchema, default: () => ({}) },
       version: { type: Number, default: 0 },
       publishedAt: { type: Date, default: null },
     },

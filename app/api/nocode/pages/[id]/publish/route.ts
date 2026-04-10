@@ -3,6 +3,7 @@ import connectDB from "@/lib/dbConnect";
 import { getAuthUser } from "@/lib/authUser";
 import NocodePage from "@/lib/models/NocodePage";
 import { nextVersion } from "@/lib/nocode/versioning";
+import { cleanBuilderCss, cleanBuilderHtml } from "@/lib/nocode/cleanExport";
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -19,13 +20,22 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     }
 
     const version = nextVersion(page.published?.version);
+    const html = cleanBuilderHtml(page.draft?.html ?? "");
+    const css = cleanBuilderCss(page.draft?.css ?? "");
 
     page.published = {
       grapesProjectData: page.draft?.grapesProjectData ?? null,
-      html: page.draft?.html ?? "",
-      css: page.draft?.css ?? "",
+      html,
+      css,
       js: page.draft?.js ?? "",
       bindings: page.draft?.bindings ?? [],
+      seo: page.draft?.seo ?? {
+        title: "",
+        description: "",
+        ogTitle: "",
+        ogDescription: "",
+        ogImage: "",
+      },
       version,
       publishedAt: new Date(),
     };
