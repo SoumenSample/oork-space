@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ShareButton from "./ShareButton";
 
 export const EMOJI_LIST = [
   "😀","😃","😄","😁","😆","😅","😂","🤣","😊","😇",
@@ -153,8 +152,6 @@ export default function ProjectHeader({
         </div>
       </div>
 
-      {/* ── Share button ── */}
-      {!isViewOnly && <ShareButton projectId={project._id} projectName={name} />}
     </div>
   );
 }

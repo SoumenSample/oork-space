@@ -850,11 +850,11 @@ export default function DocumentationView({
   }[mode];
 
   return (
-    <div className={`flex flex-col h-full overflow-hidden font-sans ${isDark ? "bg-slate-900 text-white" : "bg-[#eef0f3] text-gray-900"}`}>
+    <div className={`flex flex-col h-full overflow-hidden font-sans ${isDark ? "bg-zinc-900 text-white" : "bg-[#eef0f3] text-gray-900"}`}>
 
       {/* ══ TITLE BAR ══ */}
-      <div className="sticky top-0 z-40 shrink-0">
-      <div className={`flex items-center gap-3 px-4 py-2.5 shrink-0 shadow-sm ${isDark ? "bg-slate-800 border-b border-slate-700" : "bg-white border-b border-gray-200/80"}`}>
+      <div className="sticky top-0 shrink-0">
+      <div className={`flex items-center gap-3 px-4 py-2.5 shrink-0 shadow-sm ${isDark ? "bg-zinc-900 border-b border-slate-700" : "bg-white border-b border-gray-200/80"}`}>
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm shrink-0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -867,7 +867,7 @@ export default function DocumentationView({
           value={title}
           onChange={e => setTitle(e.target.value)}
           onBlur={() => scheduleSave()}
-          className={`flex-1 text-[15px] font-semibold border-none outline-none bg-transparent px-2 py-1 rounded-lg transition-colors ${isDark ? "text-white hover:bg-slate-700 focus:bg-slate-700" : "text-gray-800 hover:bg-gray-50 focus:bg-gray-50"}`}
+          className={`flex-1 text-[15px] font-semibold border-none outline-none bg-transparent px-2 py-1 rounded-lg transition-colors ${isDark ? "text-white hover:bg-slate-700 focus:bg-zinc-900" : "text-gray-800 hover:bg-gray-50 focus:bg-gray-50"}`}
           placeholder="Untitled Document"
         />
         {/* Mode badge */}
@@ -896,7 +896,7 @@ export default function DocumentationView({
       </div>
 
       {/* ══ MENU BAR ══ */}
-      <div className={`flex items-center gap-0.5 px-3 py-1 shrink-0 text-[12px] ${isDark ? "bg-slate-800 border-b border-slate-700 text-white" : "bg-white border-b border-gray-200/80"}`}>
+      <div className={`flex items-center gap-0.5 px-3 py-1 shrink-0 text-[12px] ${isDark ? "bg-zinc-900 border-b border-slate-700 text-white" : "bg-white border-b border-gray-200/80"}`}>
         {[
           {
             name: "File",
@@ -1011,7 +1011,7 @@ export default function DocumentationView({
               {menu.name}
             </button>
             {openMenu === menu.name && (
-              <div className={`absolute left-0 top-full z-50 rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[220px] mt-0.5 ${isDark ? "bg-slate-800 border border-slate-600" : "bg-white border border-gray-200"}`}>
+              <div className={`absolute left-0 top-full z-50 rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[220px] mt-0.5 ${isDark ? "bg-zinc-900 border border-slate-600" : "bg-white border border-gray-200"}`}>
                 {menu.items()}
               </div>
             )}
@@ -1042,7 +1042,7 @@ export default function DocumentationView({
 
       {/* ══ TOOLBAR ══ */}
       {mode !== "viewing" && (
-        <div className={`flex flex-wrap items-center gap-0.5 px-2 py-1.5 shrink-0 overflow-x-auto ${isDark ? "bg-slate-800 border-b border-slate-700" : "bg-white border-b border-gray-200/80"}`}>
+        <div className={`flex flex-wrap items-center gap-0.5 px-2 py-1.5 shrink-0 overflow-x-auto ${isDark ? "bg-zinc-900 border-b border-slate-700" : "bg-white border-b border-gray-200/80"}`}>
 
           <TB title="Undo (Ctrl+Z)" onClick={() => exec("undo")}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
@@ -1254,7 +1254,7 @@ export default function DocumentationView({
         )}
 
         {/* Page canvas */}
-        <div className={`flex-1 overflow-auto flex justify-center py-8 px-4 min-h-0 ${isDark ? "bg-slate-900 text-white" : "bg-gray-100"}`}
+        <div className={`flex-1 overflow-auto flex justify-center py-8 px-4 min-h-0 ${isDark ? "bg-zinc-900 text-white" : "bg-gray-100"}`}
          >
           <div style={{ width: pageW * (zoom / 100), transformOrigin:"top center" }}>
             <div
