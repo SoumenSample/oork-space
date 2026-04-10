@@ -4,6 +4,19 @@ import Project from "@/lib/models/Project";
 import crypto from "crypto";
 import { getAuthUser } from "@/lib/authUser";
 
+function resolveBaseUrl(req: Request): string {
+  const configured = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(req.url).origin;
+}
+
 // Generate a share link
 export async function POST(
   req: Request,
@@ -60,7 +73,7 @@ export async function POST(
     console.log("✅ API: Share link saved to project");
 
     // Generate full URL
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl = resolveBaseUrl(req);
     const shareUrl = `${baseUrl}/shared/${token}`;
 
     console.log("🔗 API: Generated share URL:", shareUrl);
