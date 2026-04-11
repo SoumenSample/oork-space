@@ -377,7 +377,7 @@ export default function ShareButton({
       {/* ── Trigger ── */}
       <button
         onClick={() => setShowModal(true)}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-sm font-semibold transition-all shadow-md shadow-indigo-500/25"
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl bg-transparent  active:scale-95 text-black text-sm font-semibold  border rounded-2xl ${isDark ? "text-white border-white" : "text-black border-black"}`}
       >
         <Share2 size={15}/>
         Share

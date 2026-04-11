@@ -73,8 +73,8 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
 
   return (
     <div style={{ height: "80vh", border: "1px solid #ddd" }}>
-      <div style={{ padding: 8, display: "flex", gap: 8 }}>
-        <select value={selectedTriggerType} onChange={(e) => setSelectedTriggerType(e.target.value)}>
+      <div style={{ padding: 8, display: "flex", gap: 8 }} >
+        <select value={selectedTriggerType} className="border p-2 rounded-xl" onChange={(e) => setSelectedTriggerType(e.target.value)}>
           {TRIGGER_TYPES.map((item) => (
             <option key={item.value} value={item.value}>{item.label}</option>
           ))}
@@ -92,13 +92,14 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
               },
             ])
           }
+          className="border p-2 rounded-xl"
         >
           Add Trigger
         </button>
 
-        <button onClick={deleteTriggerNodes}>Delete Trigger</button>
+        <button onClick={deleteTriggerNodes} className="border p-2 rounded-xl">Delete Trigger</button>
 
-        <button onClick={deleteSelected}>Delete Selected</button>
+        <button onClick={deleteSelected} className="border p-2 rounded-xl">Delete Selected</button>
 
         <button
           onClick={() =>
@@ -112,12 +113,13 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
               },
             ])
           }
+          className="border p-2 rounded-xl"
         >
           Add Action
         </button>
 
-        <button onClick={() => void onSave({ nodes, edges })}>Save</button>
-        <button onClick={() => void onPublish()}>Publish</button>
+        <button onClick={() => void onSave({ nodes, edges })} className="border p-2 rounded-xl">Save</button>
+        <button onClick={() => void onPublish()} className="border p-2 rounded-xl">Publish</button>
       </div>
 
       <ReactFlow

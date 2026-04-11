@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
 import ShareButton from "./ShareButton";
+import ThemeToggle from "./ThemeToggle";
 
 export function SiteHeader() {
   const { setTheme ,resolvedTheme } = useTheme();
@@ -97,22 +98,25 @@ export function SiteHeader() {
           ) : null}
           <div>
                      
-                        <div className="relative w-full rounded-2xl overflow-hidden bg-linear-to-br from-rose-500 via-pink-500 to-purple-500"
+                        <div className="relative w-full rounded-2xl overflow-hidden bg-linear-to-br "
                           >
                           <div className={`flex w-full rounded-2xl p-1 gap-1 `}>
-                            <button onClick={()=>setGlobalTheme(false)} title="Light mode"
-                              // style={!isDark?{boxShadow:"0 3px 0 #c0707a,inset 0 1px 0 rgba(255,255,255,0.4)"}:{}}
-                              className={`flex flex-1 px-3 items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 active:translate-y-0.5 active:shadow-none select-none ${!isDark?"bg-linear-to-b from-white to-rose-50 text-amber-600":"text-gray-500 hover:text-gray-300 hover:bg-white/5"}`}>
-                              <Sun size={15}/>
-                            </button>
-                            <button onClick={()=>setGlobalTheme(true)} title="Dark mode"
-                              // style={isDark?{boxShadow:"0 3px 0 #050608,inset 0 1px 0 rgba(255,255,255,0.08)"}:{}}
-                              className={`flex flex-1 px-3 items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 active:translate-y-0.5 active:shadow-none select-none ${isDark?"bg-linear-to-b from-[#2e3040] to-[#1e2030] text-indigo-300":"text-gray-400 hover:text-gray-600 hover:bg-black/5"}`}>
-                              <Moon size={15}/>
-                            </button>
+                            {!isDark && (
+                              <button onClick={()=>setGlobalTheme(true)} title="Switch to Dark mode"
+                                className={`flex flex-1 px-3 items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 active:translate-y-0.5 active:shadow-none select-none bg-linear-to-b from-white to-rose-50 text-amber-600`}>
+                                <Sun size={15}/>
+                              </button>
+                            )}
+                            {isDark && (
+                              <button onClick={()=>setGlobalTheme(false)} title="Switch to Light mode"
+                                className={`flex flex-1 px-3 items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 active:translate-y-0.5 active:shadow-none select-none bg-linear-to-b from-[#2e3040] to-[#1e2030] text-indigo-300`}>
+                                <Moon size={15}/>
+                              </button>
+                            )}
                           </div>
                         </div> 
                     </div>
+                    {/* <ThemeToggle/> */}
            {/* Logout */}
             {/* <button
              onClick={logout}
