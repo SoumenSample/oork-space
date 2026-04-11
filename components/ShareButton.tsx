@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
 import {
   Share2, Eye, Edit, Copy, Check, X, Trash2,
-  Globe, Link2, Users, Lock, ChevronDown,
+  Globe, Link2, Users, ChevronDown,
   MessageSquare, Search, BookOpen, User,
   ToggleLeft, ToggleRight, Send, Wifi,
   Shield, Pencil, ExternalLink, Plus,
@@ -171,9 +171,6 @@ export default function ShareButton({
   /* permission for new generated link */
   const [linkPermission, setLinkPermission] = useState<"view"|"edit">("view");
 
-  /* access control */
-  const [accessMode, setAccessMode] = useState<"invite-only"|"anyone-view"|"anyone-edit">("invite-only");
-
   /* publish tab state */
   const [isPublished,       setIsPublished]       = useState(false);
   const [allowEditing,      setAllowEditing]       = useState(false);
@@ -191,6 +188,7 @@ export default function ShareButton({
   }));
 
   const modalRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showModal) return;
@@ -204,7 +202,7 @@ export default function ShareButton({
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) setShowModal(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setShowModal(false);
     };
     if (showModal) document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -361,35 +359,29 @@ export default function ShareButton({
   const muted     = isDark ? "text-gray-500"   : "text-gray-400";
   const sectionLbl= `text-[11px] font-bold uppercase tracking-widest ${muted} mb-2`;
 
-  const ACCESS_OPTIONS = [
-    { key: "invite-only",  label: "Invite only",      sub: "Only people you invite",          icon: Lock,   color: "text-rose-500"   },
-    { key: "anyone-view",  label: "Anyone with link",  sub: "Link holders can view",           icon: Link2,  color: "text-sky-500"    },
-    { key: "anyone-edit",  label: "Anyone can edit",   sub: "Link holders can view & edit",    icon: Globe,  color: "text-emerald-500"},
-  ] as const;
-
   const shareTabs: Array<{ key: "share" | "publish"; label: string; icon: typeof Users }> = [
     { key: "share", label: "Share", icon: Users },
     { key: "publish", label: "Publish", icon: Globe as typeof Users },
   ];
 
   return (
-    <>
+    <div ref={containerRef} className="relative inline-block">
       {/* ── Trigger ── */}
       <button
-        onClick={() => setShowModal(true)}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl bg-transparent  active:scale-95 text-black text-sm font-semibold  border rounded-2xl ${isDark ? "text-white border-white" : "text-black border-black"}`}
+        onClick={() => setShowModal((prev) => !prev)}
+        className={`flex items-center gap-2 px-4 py-2 bg-transparent active:scale-95 text-black text-sm font-semibold border rounded-2xl ${isDark ? "text-white border-white" : "text-black border-black"}`}
       >
         <Share2 size={15}/>
         Share
       </button>
 
-      {/* ── Modal ── */}
+      {/* ── Dropdown panel ── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-999 p-4">
+        <div className="absolute right-0 top-full mt-2 z-999 w-[min(92vw,42rem)]">
           <div
             ref={modalRef}
-            className={`w-full max-w-xl rounded-2xl shadow-2xl border ${surface} ${border} ${txt} flex flex-col overflow-hidden`}
-            style={{ maxHeight: "90vh" }}
+            className={`w-full rounded-2xl shadow-2xl border ${surface} ${border} ${txt} flex flex-col overflow-hidden`}
+            style={{ maxHeight: "min(80vh, 42rem)" }}
           >
 
             {/* ── Modal header ── */}
@@ -522,38 +514,6 @@ export default function ShareButton({
                         })}
                       </div>
                     </div>
-                  )}
-
-                  {/* Access control */}
-                  {canManageCollaborators && (
-                  <div>
-                    <p className={sectionLbl}>General access</p>
-                    <div className={`rounded-xl border ${border} overflow-hidden`}>
-                      {ACCESS_OPTIONS.map((opt, i) => {
-                        const Icon = opt.icon;
-                        const active = accessMode === opt.key;
-                        return (
-                          <button key={opt.key} onClick={() => setAccessMode(opt.key)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all ${
-                              i > 0 ? `border-t ${border}` : ""
-                            } ${active ? isDark?"bg-white/5":"bg-gray-50" : isDark?"hover:bg-white/3":"hover:bg-gray-50/50"}`}>
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${active ? opt.color.replace("text-","bg-").replace("500","500/15") : isDark?"bg-white/5":"bg-gray-100"}`}>
-                              <Icon size={15} className={active ? opt.color : muted}/>
-                            </div>
-                            <div className="flex-1">
-                              <p className={`text-sm font-semibold ${active ? "" : muted}`}>{opt.label}</p>
-                              <p className={`text-[11px] ${muted}`}>{opt.sub}</p>
-                            </div>
-                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                              active ? "border-indigo-500" : isDark?"border-gray-600":"border-gray-300"
-                            }`}>
-                              {active && <div className="w-2 h-2 rounded-full bg-indigo-500"/>}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
                   )}
 
                   {/* Generate link */}
@@ -775,6 +735,6 @@ export default function ShareButton({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
