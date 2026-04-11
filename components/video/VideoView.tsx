@@ -57,6 +57,46 @@ const FILTER_PRESETS = [
 const FONTS = ["Arial","Georgia","Impact","Courier New","Trebuchet MS","Comic Sans MS","Verdana","Helvetica"];
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/webm,video/ogg,video/mov,video/avi,video/mkv,video/*";
 
+function toYouTubeEmbedUrl(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    let videoId = "";
+
+    if (host === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] || "";
+    } else if (host.includes("youtube.com")) {
+      if (url.pathname === "/watch") {
+        videoId = url.searchParams.get("v") || "";
+      } else if (url.pathname.startsWith("/shorts/")) {
+        videoId = url.pathname.split("/")[2] || "";
+      } else if (url.pathname.startsWith("/live/")) {
+        videoId = url.pathname.split("/")[2] || "";
+      } else if (url.pathname.startsWith("/embed/")) {
+        videoId = url.pathname.split("/")[2] || "";
+      }
+    }
+
+    if (!videoId) return null;
+
+    const start = url.searchParams.get("t") || url.searchParams.get("start") || "";
+    const embed = new URL(`https://www.youtube.com/embed/${videoId}`);
+    if (start) {
+      const sec = Number(start.replace(/[^0-9]/g, ""));
+      if (!Number.isNaN(sec) && sec > 0) {
+        embed.searchParams.set("start", String(sec));
+      }
+    }
+    return embed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isYouTubeEmbedUrl(url: string): boolean {
+  return /^https:\/\/www\.youtube\.com\/embed\//.test(url);
+}
+
 // ── Main Component ─────────────────────────────────────────────────
 export default function VideoView({ databaseId }: { databaseId: string }) {
   const [clips, setClips]               = useState<Clip[]>([makeClip({ title:"Sample Video", url:"https://www.w3schools.com/html/mov_bbb.mp4" })]);
@@ -100,6 +140,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   const lastLocalEditAtRef = useRef<number>(Date.now());
   const lastAppliedRemoteSnapshotRef = useRef<string>("");
   const sel = selectedClip;
+  const isYouTubeClip = isYouTubeEmbedUrl(sel.url);
 
   // ── Load from DB ──
   useEffect(() => {
@@ -245,7 +286,10 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   // ── Add from URL ──
   const addFromUrl = () => {
     if (!newUrl.trim()) { setUrlError("Enter a URL"); return; }
-    const c = makeClip({ title: newTitle || "Untitled", url: newUrl });
+    const rawUrl = newUrl.trim();
+    const ytEmbedUrl = toYouTubeEmbedUrl(rawUrl);
+    const normalizedUrl = ytEmbedUrl || rawUrl;
+    const c = makeClip({ title: newTitle || "Untitled", url: normalizedUrl });
     setClips(p => [...p, c]);
     setSelectedClip(c);
     setNewUrl(""); setNewTitle(""); setUrlError(""); setShowAddModal(false);
@@ -477,18 +521,28 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
           <div className="flex-1 bg-black flex items-center justify-center relative overflow-hidden">
             {sel.url ? (
               <>
-                <video ref={videoRef} src={sel.url} crossOrigin="anonymous"
-  className="max-h-full max-w-full"
-  style={{
-    filter: getFilter(sel),
-    transform: getTransform(sel),
-    opacity: sel.opacity / 100,
-  }}
-  onTimeUpdate={handleTimeUpdate}
-  onLoadedMetadata={handleLoaded}
-  onEnded={() => setIsPlaying(false)}
-  onClick={togglePlay}
-/>
+                {isYouTubeClip ? (
+                  <iframe
+                    src={sel.url}
+                    className="h-full w-full"
+                    title={sel.title || "YouTube video"}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video ref={videoRef} src={sel.url} crossOrigin="anonymous"
+    className="max-h-full max-w-full"
+    style={{
+      filter: getFilter(sel),
+      transform: getTransform(sel),
+      opacity: sel.opacity / 100,
+    }}
+    onTimeUpdate={handleTimeUpdate}
+    onLoadedMetadata={handleLoaded}
+    onEnded={() => setIsPlaying(false)}
+    onClick={togglePlay}
+  />
+                )}
 
                 {/* Vignette overlay */}
                 {sel.vignette > 0 && (
@@ -513,7 +567,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
                 ))}
 
                 {/* Play overlay */}
-                {!isPlaying && (
+                {!isYouTubeClip && !isPlaying && (
                   <div onClick={togglePlay} className="absolute inset-0 flex items-center justify-center cursor-pointer">
                     <div className="w-14 h-14 bg-black/60 rounded-full flex items-center justify-center hover:bg-black/80 transition">
                       <Play size={24} className="ml-0.5"/>
@@ -551,6 +605,11 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
           <div className="bg-gray-900 border-t border-gray-800 px-4 py-2 shrink-0">
             {/* Progress / timeline */}
             <div className="relative mb-2">
+              {isYouTubeClip ? (
+                <div className="mb-1 rounded-lg border border-yellow-400/20 bg-yellow-400/10 px-2 py-1 text-[10px] text-yellow-200">
+                  YouTube embeds use player controls from YouTube. Timeline trim/filter playback controls apply to direct video files.
+                </div>
+              ) : null}
               <div className="relative h-8 bg-gray-800 rounded-lg overflow-hidden cursor-pointer">
                 {/* Trim zone */}
                 <div className="absolute h-full bg-indigo-900/40 border-x-2 border-indigo-500"

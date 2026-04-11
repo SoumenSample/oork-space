@@ -21,6 +21,13 @@ import {
   Clapperboard,
   Video,
   ImagePlus,
+  Settings2,
+  CircleHelp,
+  Search,
+  CircleUserRound,
+  CreditCard,
+  Bell,
+  LogOut,
 } from "lucide-react";
 import logo from "../public/uploads/OORK_SPACE_Logos-removebg-preview.png";
 import open_logo from "../public/OORK_SPACE_Logos__1_-removebg-preview.png";
@@ -423,7 +430,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
   const { setTheme, resolvedTheme } = useTheme();
   const router   = useRouter();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const [mounted,          setMounted]          = useState(false);
   const [open,             setOpen]             = useState(true);
@@ -446,12 +453,16 @@ export default function Sidebar({ view, setView }: SidebarProps) {
   const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false);
   const [projectForm, setProjectForm] = useState({ name: "", emoji: "📁" });
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node))
         setEmojiPickerOpen(false);
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node))
+        setProfileMenuOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -606,6 +617,15 @@ export default function Sidebar({ view, setView }: SidebarProps) {
   // console.log(sortedProjects);
 
   const docsPath = user?.id ? `/editor/${user.id}` : "/editor";
+  const derivedName = (user?.name || user?.email?.split("@")[0] || "User").trim();
+  const displayName = derivedName.length > 18 ? `${derivedName.slice(0, 18)}...` : derivedName;
+  const profileEmail = user?.email || "m@example.com";
+  const profileInitials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "U";
   
   const menuItems: { key: MenuKey; label: string; path: string; icon: React.ReactNode }[] = [
     { key: "dashboard",     label: "Dashboard",     path: "/",              icon: <LayoutGrid size={open?20:22}/> },
@@ -627,7 +647,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
 
   const SidebarContent = () => (
     <>
-      <div className={`flex-1 overflow-y-auto no-scrollbar pb-16 ${isDark ? "bg-zinc-900" : "bg-zinc-50"}`}>
+      <div className={`flex-1 overflow-y-auto no-scrollbar pb-6 ${isDark ? "bg-zinc-900" : "bg-zinc-50"}`}>
 
         {/* ── LOGO ── */}
         {/* <div className={`${open ? "pt-5 pb-3" : "px-3 pt-4 pb-2"}`}> */}
@@ -823,6 +843,167 @@ export default function Sidebar({ view, setView }: SidebarProps) {
             )}
           </div> */}
         </div>
+      </div>
+
+      <div className={`border-t ${open ? "px-4 py-3" : "px-2 py-3"} ${isDark ? "border-gray-800 bg-zinc-900" : "border-gray-200 bg-zinc-50"}`}>
+        {open ? (
+          <>
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => navigateTo("/profile")}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  isDark ? "text-gray-300 hover:bg-white/5" : "text-gray-700 hover:bg-gray-200/60"
+                }`}
+              >
+                <Settings2 size={16} />
+                <span>Settings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo(docsPath)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  isDark ? "text-gray-300 hover:bg-white/5" : "text-gray-700 hover:bg-gray-200/60"
+                }`}
+              >
+                <CircleHelp size={16} />
+                <span>Get Help</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo("/inbox")}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  isDark ? "text-gray-300 hover:bg-white/5" : "text-gray-700 hover:bg-gray-200/60"
+                }`}
+              >
+                <Search size={16} />
+                <span>Search</span>
+              </button>
+            </div>
+
+            <div className={`mt-3 flex items-center gap-2.5 px-2 py-2 rounded-xl ${isDark ? "hover:bg-white/5" : "hover:bg-gray-200/60"}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? "bg-gray-700 text-gray-100" : "bg-gray-300 text-gray-800"}`}>
+                {profileInitials}
+              </div>
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className={`truncate text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{displayName}</p>
+                <p className={`truncate text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>{profileEmail}</p>
+              </div>
+
+              <div ref={profileMenuRef} className="relative">
+                <button
+                  type="button"
+                  aria-label="Profile actions"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setProfileMenuOpen((v) => !v);
+                  }}
+                  className={`p-1.5 rounded-md transition-colors ${isDark ? "text-gray-400 hover:text-gray-100 hover:bg-white/10" : "text-gray-500 hover:text-gray-900 hover:bg-gray-300/70"}`}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+
+                <AnimatePresence>
+                  {profileMenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95, y: 6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: 6 }}
+                      transition={{ duration: 0.16 }}
+                      className={`absolute bottom-full right-0 mb-2 w-52 rounded-xl border p-1.5 shadow-xl z-50 ${isDark ? "bg-[#1e1f26] border-gray-700" : "bg-white border-gray-200"}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          navigateTo("/profile");
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left transition-colors ${isDark ? "text-gray-200 hover:bg-white/10" : "text-gray-700 hover:bg-gray-100"}`}
+                      >
+                        <CircleUserRound size={15} />
+                        <span>Account</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          navigateTo("/store");
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left transition-colors ${isDark ? "text-gray-200 hover:bg-white/10" : "text-gray-700 hover:bg-gray-100"}`}
+                      >
+                        <CreditCard size={15} />
+                        <span>Billing</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          navigateTo("/inbox");
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left transition-colors ${isDark ? "text-gray-200 hover:bg-white/10" : "text-gray-700 hover:bg-gray-100"}`}
+                      >
+                        <Bell size={15} />
+                        <span>Notifications</span>
+                      </button>
+
+                      <div className={`my-1 h-px ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          logout();
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left transition-colors ${isDark ? "text-rose-300 hover:bg-rose-500/15" : "text-rose-700 hover:bg-rose-50"}`}
+                      >
+                        <LogOut size={15} />
+                        <span>Log out</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2 flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => navigateTo("/profile")}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
+                isDark ? "text-gray-300 hover:bg-white/10" : "text-gray-700 hover:bg-gray-200/60"
+              }`}
+              aria-label="Settings"
+            >
+              <Settings2 size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateTo(docsPath)}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
+                isDark ? "text-gray-300 hover:bg-white/10" : "text-gray-700 hover:bg-gray-200/60"
+              }`}
+              aria-label="Get Help"
+            >
+              <CircleHelp size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateTo("/inbox")}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
+                isDark ? "text-gray-300 hover:bg-white/10" : "text-gray-700 hover:bg-gray-200/60"
+              }`}
+              aria-label="Search"
+            >
+              <Search size={16} />
+            </button>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? "bg-gray-700 text-gray-100" : "bg-gray-300 text-gray-800"}`}>
+              {profileInitials}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Collapse button */}

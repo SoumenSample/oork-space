@@ -60,7 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Handle redirects separately to avoid React state update errors
   useEffect(() => {
-    if (!isLoading && !user && !pathname?.startsWith("/login") && !pathname?.startsWith("/signup") && !pathname?.startsWith("/forget-password") && !pathname?.startsWith("/shared")) {
+    if (
+      !isLoading &&
+      !user &&
+      !pathname?.startsWith("/login") &&
+      !pathname?.startsWith("/signup") &&
+      !pathname?.startsWith("/forget-password") &&
+      !pathname?.startsWith("/shared") &&
+      !pathname?.startsWith("/p/")
+    ) {
       router.push("/login");
     }
   }, [isLoading, user, pathname, router]);

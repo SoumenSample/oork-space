@@ -4,6 +4,19 @@ import Database from "@/lib/models/Database";
 import { getAuthUser } from "@/lib/authUser";
 import crypto from "crypto";
 
+function resolveBaseUrl(req: Request): string {
+  const configured = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(req.url).origin;
+}
+
 const ALLOWED_VIEW_TYPES = ["whiteboard", "video", "socialmedia"];
 
 export async function POST(
@@ -50,7 +63,7 @@ export async function POST(
       },
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl = resolveBaseUrl(req);
     const sharedBasePath =
       database.viewType === "whiteboard"
         ? "/whiteboard/shared"

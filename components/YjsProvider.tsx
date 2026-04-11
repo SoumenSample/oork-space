@@ -32,17 +32,33 @@ export function useYjsTable(roomName: string, options?: YjsTableOptions) {
   const ydocRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
 
+  const resolveWsUrl = () => {
+    const configured = process.env.NEXT_PUBLIC_WS_URL?.trim();
+    if (configured) return configured;
+
+    if (typeof window !== 'undefined') {
+      const host = window.location?.hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        return 'ws://localhost:1234';
+      }
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     // Create Yjs document
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
 
-    // Connect to WebSocket server (you'll need to set this up)
-    const wsProvider = new WebsocketProvider(
-      "ws://localhost:1234", // WebSocket server URL
-      roomName, // Room name
-      ydoc
-    );
+    const wsUrl = resolveWsUrl();
+    const wsProvider = wsUrl
+      ? new WebsocketProvider(
+          wsUrl, // WebSocket server URL
+          roomName, // Room name
+          ydoc
+        )
+      : null;
     providerRef.current = wsProvider;
 
     // Bind Yjs types to our data structures
@@ -59,12 +75,14 @@ export function useYjsTable(roomName: string, options?: YjsTableOptions) {
       return 'User';
     };
 
-    wsProvider.awareness.setLocalStateField('user', {
-      id: String(options?.currentUser?.id || 'anonymous'),
-      name: resolveName(),
-      email: options?.currentUser?.email || '',
-    });
-    wsProvider.awareness.setLocalStateField('activity', 'Viewing table');
+    if (wsProvider) {
+      wsProvider.awareness.setLocalStateField('user', {
+        id: String(options?.currentUser?.id || 'anonymous'),
+        name: resolveName(),
+        email: options?.currentUser?.email || '',
+      });
+      wsProvider.awareness.setLocalStateField('activity', 'Viewing table');
+    }
 
     // Initialize from Yjs data if exists, otherwise set defaults
     const initData = () => {
@@ -91,6 +109,11 @@ export function useYjsTable(roomName: string, options?: YjsTableOptions) {
     yRows.observe(updateLocalState);
 
     const updateParticipants = () => {
+      if (!wsProvider) {
+        setParticipants([]);
+        return;
+      }
+
       const states = Array.from(wsProvider.awareness.getStates().entries());
       const next = states
         .map(([clientId, state]: [number, any]) => {
@@ -107,8 +130,10 @@ export function useYjsTable(roomName: string, options?: YjsTableOptions) {
       setParticipants(next);
     };
 
-    wsProvider.awareness.on('change', updateParticipants);
-    updateParticipants();
+    if (wsProvider) {
+      wsProvider.awareness.on('change', updateParticipants);
+      updateParticipants();
+    }
 
     // Initialize data
     initData();
@@ -120,15 +145,21 @@ export function useYjsTable(roomName: string, options?: YjsTableOptions) {
       }
     };
 
-    wsProvider.on('status', handleStatusChange);
+    if (wsProvider) {
+      wsProvider.on('status', handleStatusChange);
+    } else {
+      setYjsInitialized(true);
+    }
 
     // Cleanup
     return () => {
       yProperties.unobserve(updateLocalState);
       yRows.unobserve(updateLocalState);
-      wsProvider.awareness.off('change', updateParticipants);
-      wsProvider.off('status', handleStatusChange);
-      wsProvider.disconnect();
+      if (wsProvider) {
+        wsProvider.awareness.off('change', updateParticipants);
+        wsProvider.off('status', handleStatusChange);
+        wsProvider.disconnect();
+      }
     };
   }, [roomName, options?.seedData, options?.currentUser?.id, options?.currentUser?.name, options?.currentUser?.email]);
 
