@@ -275,7 +275,7 @@ const handleDeleteDatabase = async () => {
       │  z-20 keeps it above the content rows but below modals. │
       └─────────────────────────────────────────────────────────┘
     */
-    <div className={`sticky top-0 z-20 rounded-2xl  rounded-t-xl ${isDark ? "bg-black" : "bg-transparent"}`}>
+    <div className={`sticky top-0 z-20 rounded-2xl  rounded-t-xl ${isDark ? "bg-black" : "bg-white"}`}>
 
       {/* ══ ROW 1: DB icon + name ══════════════════════════════ */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-2 relative">

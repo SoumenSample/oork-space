@@ -55,7 +55,7 @@ export default class TableBlockTool {
     this.data.databaseId = databaseId;
     this.root = createRoot(this.wrapper);
     this.root.render(
-      <div className={`${isDark ? 'bg-transparent ' : 'bg-transparent border-gray-200'} rounded-2xl border p-2 shadow-sm`}>
+      <div className={`${isDark ? 'bg-transparent ' : 'bg-transparent border-gray-200'} rounded-2xl border p-1 w-220 shadow-sm`}>
         <TableView databaseId={databaseId} isDark={isDark} />
       </div>
     );

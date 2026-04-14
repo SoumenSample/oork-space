@@ -85,6 +85,7 @@ export default function SocialMediaPage() {
       setProjectId(projects[0]._id);
     }
   }, [activeProjectId, projectId, projects]);
+  
 
   const socialPosts = useMemo<SocialMediaRecord[]>(() => {
     return projects.flatMap((project) => {
