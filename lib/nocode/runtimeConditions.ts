@@ -4,8 +4,8 @@ export async function evaluateCondition(
 ): Promise<boolean> {
   if (conditionKey === "always") return true;
 
-  if (conditionKey === "hasEmail") {
-    const email = input?.email;
+  if (conditionKey === "hasEmail" || conditionKey === "email") {
+    const email = input?.email ?? input?.Email;
     return typeof email === "string" && email.includes("@");
   }
 

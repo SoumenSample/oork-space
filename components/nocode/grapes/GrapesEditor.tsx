@@ -34,6 +34,24 @@ type Props = {
 
 type AppPageItem = { _id: string; name: string; slug: string };
 type WorkflowItem = { _id: string; name: string; key: string; status: string; updatedAt?: string };
+type WorkflowStepLog = {
+  nodeId?: string;
+  nodeType?: string;
+  status?: string;
+  error?: string;
+  startedAt?: string;
+  endedAt?: string;
+};
+type WorkflowRunItem = {
+  _id: string;
+  workflowId?: string;
+  status?: string;
+  error?: string;
+  createdAt?: string;
+  finishedAt?: string;
+  triggerType?: string;
+  stepLogs?: WorkflowStepLog[];
+};
 type SavedSnippet = { id: string; name: string; html: string; savedAt: number };
 type FormField = {
   id: string;
@@ -305,6 +323,14 @@ export default function GrapesEditor({
   const [seo, setSeo] = useState<SeoDraft>({ ...EMPTY_SEO, ...initialSeo });
   const [showFormBuilder, setShowFormBuilder] = useState(false);
   const [formWorkflowKey, setFormWorkflowKey] = useState("");
+  const [showWorkflowDrawer, setShowWorkflowDrawer] = useState(false);
+  const [workflowDrawerId, setWorkflowDrawerId] = useState("");
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunItem[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsError, setRunsError] = useState("");
+  const [isRenamingWorkflow, setIsRenamingWorkflow] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [isRunsPanelCollapsed, setIsRunsPanelCollapsed] = useState(false);
   const [formSubmitLabel, setFormSubmitLabel] = useState("Submit");
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [showFloatingInspector, setShowFloatingInspector] = useState(false);
@@ -572,6 +598,49 @@ export default function GrapesEditor({
     setStatus(`Inserted ${snippet.name}`);
   }, []);
 
+  const findNearestFormComponent = useCallback((component: any): any | null => {
+    let current = component;
+    while (current) {
+      const tag = String(current?.get?.("tagName") || "").toLowerCase();
+      if (tag === "form") return current;
+      current = current?.parent?.();
+    }
+    return null;
+  }, []);
+
+  const syncWorkflowKeyFromSelectedForm = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const selected = editor.getSelected?.();
+    const form = findNearestFormComponent(selected);
+    if (!form) return;
+
+    const attrs = (form.getAttributes?.() || {}) as Record<string, unknown>;
+    const key = String(attrs["data-workflow-key"] || "");
+    setFormWorkflowKey(key);
+  }, [findNearestFormComponent]);
+
+  const applyWorkflowKeyToSelectedForm = useCallback((workflowKey: string) => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+
+    const selected = editor.getSelected?.();
+    const form = findNearestFormComponent(selected);
+    if (!form) return false;
+
+    const attrs = (form.getAttributes?.() || {}) as Record<string, unknown>;
+    form.addAttributes({
+      ...attrs,
+      "data-workflow-key": workflowKey,
+      "data-app-id": appId || String(attrs["data-app-id"] || ""),
+      "data-workflow-alert": String(attrs["data-workflow-alert"] || "true"),
+    });
+
+    setStatus(workflowKey ? `Assigned workflow ${workflowKey} to selected form` : "Cleared selected form workflow");
+    return true;
+  }, [appId, findNearestFormComponent]);
+
   const linkSelectedElement = useCallback((slug: string) => {
     const editor = editorRef.current;
     if (!editor || !slug) return;
@@ -623,6 +692,7 @@ export default function GrapesEditor({
 
       if (createdKey) {
         setFormWorkflowKey(createdKey);
+        applyWorkflowKeyToSelectedForm(createdKey);
       }
 
       if (createdId && createdKey) {
@@ -638,22 +708,38 @@ export default function GrapesEditor({
       }
 
       if (createdId) {
-        window.open(`/nocode/workflows/${createdId}`, "_blank", "noreferrer");
+        await runSave();
+        setWorkflowDrawerId(createdId);
+        setShowWorkflowDrawer(true);
       }
       setStatus("Workflow created");
     } catch {
       setStatus("Failed to create workflow");
     }
-  }, [appId, pageName]);
+  }, [appId, applyWorkflowKeyToSelectedForm, pageName, runSave]);
 
-  const openSelectedWorkflowFromBuilder = useCallback(() => {
-    const selected = workflows.find((wf) => wf.key === formWorkflowKey) || workflows[0];
+  const openSelectedWorkflowFromBuilder = useCallback(async () => {
+    let activeKey = formWorkflowKey;
+    const editor = editorRef.current;
+    if (editor) {
+      const selectedComponent = editor.getSelected?.();
+      const selectedForm = findNearestFormComponent(selectedComponent);
+      if (selectedForm) {
+        const attrs = (selectedForm.getAttributes?.() || {}) as Record<string, unknown>;
+        activeKey = String(attrs["data-workflow-key"] || "");
+      }
+    }
+
+    const selected = workflows.find((wf) => wf.key === activeKey) || workflows.find((wf) => wf.key === formWorkflowKey) || workflows[0];
     if (!selected?._id) {
       setStatus("No workflow available to open");
       return;
     }
-    window.open(`/nocode/workflows/${selected._id}`, "_blank", "noreferrer");
-  }, [formWorkflowKey, workflows]);
+
+    await runSave();
+    setWorkflowDrawerId(selected._id);
+    setShowWorkflowDrawer(true);
+  }, [findNearestFormComponent, formWorkflowKey, runSave, workflows]);
 
   const addFormField = useCallback(() => {
     setFormFields((prev) => [
@@ -706,7 +792,7 @@ export default function GrapesEditor({
       return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<input type=\"${field.type}\" name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;\" /></label>`;
     }).join("");
 
-    return `<form data-workflow-key=\"${formWorkflowKey}\" data-app-id=\"${appId || ""}\" style=\"display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;\">${fieldsHtml}<button type=\"submit\" style=\"padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;\">${formSubmitLabel || "Submit"}</button></form>`;
+    return `<form data-workflow-key=\"${formWorkflowKey}\" data-app-id=\"${appId || ""}\" data-workflow-alert=\"true\" style=\"display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;\">${fieldsHtml}<button type=\"submit\" style=\"padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;\">${formSubmitLabel || "Submit"}</button></form>`;
   }, [appId, formFields, formSubmitLabel, formWorkflowKey]);
 
   const insertBuiltForm = useCallback(() => {
@@ -730,6 +816,120 @@ export default function GrapesEditor({
       setIsPublishing(false);
     }
   }, [onPublish, runSave]);
+
+  const selectedWorkflow = useMemo(() => {
+    return workflows.find((wf) => wf.key === formWorkflowKey) || workflows[0] || null;
+  }, [formWorkflowKey, workflows]);
+
+  const renameWorkflowFromDrawer = useCallback(async () => {
+    if (!workflowDrawerId) {
+      setStatus("Open a workflow first");
+      return;
+    }
+
+    const current = workflows.find((wf) => wf._id === workflowDrawerId);
+    const currentName = String(current?.name || "Workflow");
+    const nextNameInput = window.prompt("Enter new workflow name", currentName);
+    if (nextNameInput === null) return;
+
+    const nextName = nextNameInput.trim();
+    if (!nextName) {
+      window.alert("Workflow name cannot be empty.");
+      return;
+    }
+
+    if (nextName === currentName) return;
+
+    try {
+      setIsRenamingWorkflow(true);
+      const res = await fetch(`/api/nocode/workflows/${workflowDrawerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Rename failed (${res.status})`);
+      }
+
+      const json = await res.json();
+      const updated = json?.data;
+
+      setWorkflows((prev) => prev.map((wf) => (
+        wf._id === workflowDrawerId
+          ? {
+            ...wf,
+            name: String(updated?.name || nextName),
+            status: String(updated?.status || wf.status),
+            updatedAt: updated?.updatedAt ? String(updated.updatedAt) : wf.updatedAt,
+          }
+          : wf
+      )));
+
+      setStatus(`Workflow renamed to ${String(updated?.name || nextName)}`);
+    } catch {
+      setStatus("Failed to rename workflow");
+      window.alert("Failed to rename workflow");
+    } finally {
+      setIsRenamingWorkflow(false);
+    }
+  }, [workflowDrawerId, workflows]);
+
+  const selectedRun = useMemo(() => {
+    return workflowRuns.find((run) => run._id === selectedRunId) || workflowRuns[0] || null;
+  }, [selectedRunId, workflowRuns]);
+
+  const fetchWorkflowRuns = useCallback(async () => {
+    if (!appId) return;
+
+    try {
+      setRunsLoading(true);
+      setRunsError("");
+
+      const res = await fetch(`/api/nocode/runs?appId=${appId}`, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`Failed to load runs (${res.status})`);
+      }
+
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : [];
+      const filteredByWorkflow = list.filter((item: any) => String(item?.workflowId || "") === String(workflowDrawerId || ""));
+
+      const mapped = filteredByWorkflow.map((item: any) => ({
+        _id: String(item?._id || ""),
+        workflowId: String(item?.workflowId || ""),
+        status: String(item?.status || ""),
+        error: String(item?.error || ""),
+        createdAt: item?.createdAt ? String(item.createdAt) : "",
+        finishedAt: item?.finishedAt ? String(item.finishedAt) : "",
+        triggerType: String(item?.triggerType || ""),
+        stepLogs: Array.isArray(item?.stepLogs) ? item.stepLogs : [],
+      }));
+
+      setWorkflowRuns(mapped);
+      setSelectedRunId((prev) => {
+        if (prev && mapped.some((run: WorkflowRunItem) => run._id === prev)) return prev;
+        return mapped[0]?._id || "";
+      });
+    } catch (error) {
+      setRunsError(error instanceof Error ? error.message : "Failed to load runs");
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [appId, workflowDrawerId]);
+
+  useEffect(() => {
+    if (!showWorkflowDrawer || !workflowDrawerId || !appId) return;
+
+    void fetchWorkflowRuns();
+    const poll = window.setInterval(() => {
+      void fetchWorkflowRuns();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(poll);
+    };
+  }, [appId, fetchWorkflowRuns, showWorkflowDrawer, workflowDrawerId]);
 
   useEffect(() => {
     if (!rootRef.current || editorRef.current) return;
@@ -893,6 +1093,8 @@ export default function GrapesEditor({
       if (tag === "img") {
         component.set("traits", ["alt", { type: "text", name: "src", label: "Image URL" }]);
       }
+
+      syncWorkflowKeyFromSelectedForm();
     });
 
       editor.on("component:dblclick", (component: any) => {
@@ -986,7 +1188,7 @@ export default function GrapesEditor({
     editor.BlockManager.add("visual-form", {
       label: visualLabel("F", "Form"),
       content:
-        `<form data-workflow-key="" data-app-id="${appId || ""}" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
+        `<form data-workflow-key="" data-app-id="${appId || ""}" data-workflow-alert="true" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
     });
 
     editor.BlockManager.add("visual-footer", {
@@ -1310,6 +1512,14 @@ export default function GrapesEditor({
           <button className="nocode-btn nocode-btn-secondary" onClick={() => setShowFormBuilder((v) => !v)} title="Build and insert custom forms visually">
             Form Builder
           </button>
+          <button
+            className="nocode-btn nocode-btn-secondary"
+            onClick={openSelectedWorkflowFromBuilder}
+            disabled={!workflows.length}
+            title="Open workflow editor"
+          >
+            Workflows
+          </button>
           {pageSlug ? (
             <a className="nocode-btn nocode-btn-secondary" href={`/p/${pageSlug}`} target="_blank" rel="noreferrer">
               Open Live
@@ -1323,6 +1533,178 @@ export default function GrapesEditor({
           </button>
         </div>
       </div>
+
+      {showWorkflowDrawer ? (
+        <div
+          className="nocode-workflow-drawer-overlay"
+          onClick={() => setShowWorkflowDrawer(false)}
+          role="presentation"
+        >
+          <aside
+            className="nocode-workflow-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workflow editor drawer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="nocode-workflow-drawer-head">
+              <div className="nocode-workflow-drawer-title-wrap">
+                <h3 className="nocode-workflow-drawer-title">
+                  {selectedWorkflow ? selectedWorkflow.name : "Workflow"}
+                </h3>
+                <p className="nocode-workflow-drawer-subtitle">
+                  Manage flow logic without leaving the builder.
+                </p>
+              </div>
+
+              <div className="nocode-form-builder-actions">
+                <button
+                  className="nocode-btn nocode-btn-secondary"
+                  onClick={() => void renameWorkflowFromDrawer()}
+                  type="button"
+                  disabled={!workflowDrawerId || isRenamingWorkflow}
+                >
+                  {isRenamingWorkflow ? "Renaming..." : "Rename"}
+                </button>
+                <button
+                  className="nocode-btn nocode-btn-secondary"
+                  onClick={() => setIsRunsPanelCollapsed((value) => !value)}
+                  type="button"
+                >
+                  {isRunsPanelCollapsed ? "Show Runs" : "Hide Runs"}
+                </button>
+                {workflowDrawerId ? (
+                  <a
+                    className="nocode-btn nocode-btn-secondary"
+                    href={`/nocode/workflows/${workflowDrawerId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open in Tab
+                  </a>
+                ) : null}
+                <button
+                  className="nocode-btn nocode-btn-secondary"
+                  onClick={() => setShowWorkflowDrawer(false)}
+                  type="button"
+                >
+                  Open Builder
+                </button>
+              </div>
+            </div>
+
+            <div className="nocode-workflow-drawer-body">
+              {workflowDrawerId ? (
+                <div className={`nocode-workflow-drawer-split ${isRunsPanelCollapsed ? "runs-collapsed" : ""}`}>
+                  <div className="nocode-workflow-drawer-editor">
+                    <iframe
+                      key={workflowDrawerId}
+                      src={`/nocode/workflows/${workflowDrawerId}?embed=1`}
+                      className="nocode-workflow-drawer-frame"
+                      title="Workflow editor"
+                    />
+                  </div>
+
+                  <aside className={`nocode-workflow-runs-panel ${isRunsPanelCollapsed ? "collapsed" : ""}`}>
+                    {isRunsPanelCollapsed ? (
+                      <button
+                        className="nocode-workflow-runs-collapse-rail"
+                        onClick={() => setIsRunsPanelCollapsed(false)}
+                        type="button"
+                        aria-label="Show runs panel"
+                        title="Show runs panel"
+                      >
+                        Runs
+                      </button>
+                    ) : null}
+
+                    {!isRunsPanelCollapsed ? (
+                      <>
+                        <div className="nocode-workflow-runs-head">
+                          <strong>Runs</strong>
+                          <button
+                            className="nocode-btn nocode-btn-secondary"
+                            type="button"
+                            onClick={() => void fetchWorkflowRuns()}
+                            disabled={runsLoading}
+                          >
+                            {runsLoading ? "Refreshing..." : "Refresh"}
+                          </button>
+                        </div>
+
+                        {runsError ? (
+                          <p className="nocode-small-helper">{runsError}</p>
+                        ) : null}
+
+                        <div className="nocode-workflow-runs-list">
+                          {workflowRuns.length ? workflowRuns.map((run) => {
+                            const isActive = selectedRun?._id === run._id;
+                            const created = run.createdAt ? new Date(run.createdAt) : null;
+                            const createdLabel = created && !Number.isNaN(created.getTime())
+                              ? created.toLocaleTimeString()
+                              : "-";
+
+                            return (
+                              <button
+                                key={run._id}
+                                className={`nocode-workflow-run-item ${isActive ? "active" : ""}`}
+                                onClick={() => setSelectedRunId(run._id)}
+                                type="button"
+                              >
+                                <div className="nocode-workflow-item-top">
+                                  <span>{run.triggerType || "trigger"}</span>
+                                  <span className={`nocode-workflow-badge ${run.status === "success" ? "published" : "draft"}`}>
+                                    {run.status || "-"}
+                                  </span>
+                                </div>
+                                <div className="nocode-workflow-item-meta">{run._id}</div>
+                                <div className="nocode-workflow-item-meta">Started: {createdLabel}</div>
+                              </button>
+                            );
+                          }) : (
+                            <p className="nocode-small-helper">No runs yet for this workflow.</p>
+                          )}
+                        </div>
+
+                        <div className="nocode-workflow-run-details">
+                          <div className="nocode-workflow-list-head">Run Details</div>
+                          {selectedRun ? (
+                            <>
+                              <div className="nocode-workflow-item-meta">Run: {selectedRun._id}</div>
+                              <div className="nocode-workflow-item-meta">Status: {selectedRun.status || "-"}</div>
+                              {selectedRun.error ? <div className="nocode-workflow-item-meta">Error: {selectedRun.error}</div> : null}
+                              <div className="nocode-workflow-list-head">Steps</div>
+                              <div className="nocode-workflow-steps-list">
+                                {(selectedRun.stepLogs || []).length ? (selectedRun.stepLogs || []).map((step, index) => (
+                                  <div className="nocode-workflow-step-item" key={`${selectedRun._id}-step-${index}`}>
+                                    <div className="nocode-workflow-item-top">
+                                      <span>{step.nodeType || step.nodeId || "step"}</span>
+                                      <span className={`nocode-workflow-badge ${step.status === "success" ? "published" : "draft"}`}>
+                                        {step.status || "-"}
+                                      </span>
+                                    </div>
+                                    {step.error ? <div className="nocode-workflow-item-meta">{step.error}</div> : null}
+                                  </div>
+                                )) : (
+                                  <p className="nocode-small-helper">No step logs yet.</p>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <p className="nocode-small-helper">Select a run to inspect details.</p>
+                          )}
+                        </div>
+                      </>
+                    ) : null}
+                  </aside>
+                </div>
+              ) : (
+                <p className="nocode-small-helper">Select or create a workflow first.</p>
+              )}
+            </div>
+          </aside>
+        </div>
+      ) : null}
 
       <div className={`nocode-builder-grid ${isRightSidebarCollapsed ? "right-collapsed" : ""}`}>
         <aside className="nocode-panel nocode-panel-left">
@@ -1487,7 +1869,17 @@ export default function GrapesEditor({
               <p>Create fields and connect submissions to your workflow.</p>
 
               <label>Workflow</label>
-              <select value={formWorkflowKey} onChange={(e) => setFormWorkflowKey(e.target.value)}>
+              <select
+                value={formWorkflowKey}
+                onChange={(e) => {
+                  const nextKey = e.target.value;
+                  setFormWorkflowKey(nextKey);
+                  const applied = applyWorkflowKeyToSelectedForm(nextKey);
+                  if (!applied) {
+                    setStatus("Select a form to assign workflow");
+                  }
+                }}
+              >
                 <option value="">No workflow</option>
                 {workflows.map((wf) => (
                   <option value={wf.key} key={wf._id}>{wf.name} ({wf.key})</option>
@@ -1512,7 +1904,13 @@ export default function GrapesEditor({
                     <button
                       key={wf._id}
                       className={`nocode-workflow-item ${selected ? "active" : ""}`}
-                      onClick={() => setFormWorkflowKey(wf.key)}
+                      onClick={() => {
+                        setFormWorkflowKey(wf.key);
+                        const applied = applyWorkflowKeyToSelectedForm(wf.key);
+                        if (!applied) {
+                          setStatus("Select a form to assign workflow");
+                        }
+                      }}
                       type="button"
                     >
                       <div className="nocode-workflow-item-top">
@@ -1623,6 +2021,43 @@ export default function GrapesEditor({
               >
                 Link Selected Element
               </button>
+            </div>
+
+            <h3>Workflows</h3>
+            <div className="nocode-pane-scroll nocode-seo-panel">
+              <label>Active Workflow</label>
+              <select
+                className="nocode-full-width"
+                value={formWorkflowKey}
+                onChange={(e) => {
+                  const nextKey = e.target.value;
+                  setFormWorkflowKey(nextKey);
+                  const applied = applyWorkflowKeyToSelectedForm(nextKey);
+                  if (!applied) {
+                    setStatus("Select a form to assign workflow");
+                  }
+                }}
+              >
+                <option value="">No workflow</option>
+                {workflows.map((wf) => (
+                  <option value={wf.key} key={wf._id}>{wf.name} ({wf.key})</option>
+                ))}
+              </select>
+
+              <div className="nocode-form-builder-actions">
+                <button className="nocode-btn nocode-btn-secondary nocode-full-width" onClick={() => void createWorkflowFromBuilder()}>
+                  Create Workflow
+                </button>
+                <button className="nocode-btn nocode-btn-secondary nocode-full-width" onClick={openSelectedWorkflowFromBuilder} disabled={!workflows.length}>
+                  Open Workflow
+                </button>
+              </div>
+
+              <p className="nocode-small-helper">
+                {selectedWorkflow
+                  ? `Selected: ${selectedWorkflow.name} (${selectedWorkflow.status})`
+                  : "No workflow yet. Create one to connect forms and automations."}
+              </p>
             </div>
 
             <h3>SEO</h3>

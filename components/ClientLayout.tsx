@@ -36,28 +36,39 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading, checkAuth } = useAuth();
    
-  // Use state with lazy initialization to avoid hydration mismatch
-  const [mounted, setMounted] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return true;
-    }
-    return false;
-  });
+  const [mounted, setMounted] = useState(false);
   const [view, setView] = useState('Dashboard');
   const [isLoading, setIsLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [headerCollaborators, setHeaderCollaborators] = useState<Collaborator[]>([]);
   const [headerTitle, setHeaderTitle] = useState('Team Project');
+  const [isWorkflowEmbed, setIsWorkflowEmbed] = useState(false);
 
   // Shared pages now use the same app chrome for consistent UX.
   const isSharedPage = pathname?.startsWith('/shared');
   const isPublicSitePage = pathname?.startsWith('/p/');
   const isAuthPage = pathname?.startsWith('/login') || pathname?.startsWith('/signup');
 
-  // Set mounted on client
-  if (typeof window !== 'undefined' && !mounted) {
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setIsWorkflowEmbed(false);
+      return;
+    }
+
+    if (!pathname?.startsWith('/nocode/workflows/')) {
+      setIsWorkflowEmbed(false);
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search || '');
+    const embed = params.get('embed');
+    setIsWorkflowEmbed(embed === '1' || embed === 'true');
+  }, [pathname]);
+
+  // Mark client mount after hydration to keep server/client initial output identical.
+  useEffect(() => {
     setMounted(true);
-  }
+  }, []);
 
   // Check auth on mount
   useEffect(() => {
@@ -189,7 +200,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
     };
   }, [pathname, mounted, isAuthenticated, isSharedPage, isPublicSitePage]);
 
-  if (isPublicSitePage) {
+  if (isPublicSitePage || isWorkflowEmbed) {
     return (
       <LayoutContext.Provider value={{ view, setView }}>
         {children}

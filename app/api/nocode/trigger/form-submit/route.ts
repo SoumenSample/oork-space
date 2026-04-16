@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       runId: String(run._id),
       workflowId: String(workflow._id),
       appId,
+      triggerType: "form.submit",
       triggerPayload: formData,
     });
 

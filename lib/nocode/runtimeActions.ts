@@ -20,7 +20,16 @@ export async function runAction(
   }
 
   if (actionType === "action.log") {
-    return { logged: true, message: String(config?.message || "log") };
+    const message = String(config?.message || "log");
+    console.log(`[workflow:action.log] ${message}`);
+    return { logged: true, message };
+  }
+
+  if (actionType === "action.alert") {
+    return {
+      alert: true,
+      message: String(config?.message || "Workflow test alert"),
+    };
   }
 
   throw new Error(`Unsupported action type: ${actionType}`);

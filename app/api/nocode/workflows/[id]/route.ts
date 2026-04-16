@@ -28,15 +28,28 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const { id } = await context.params;
     const body = await req.json();
 
+    const setPayload: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
+
+    if (typeof body?.name === "string") {
+      const nextName = body.name.trim();
+      if (nextName) setPayload.name = nextName;
+    }
+
+    if (body?.draftGraph && typeof body.draftGraph === "object") {
+      if (Array.isArray(body?.draftGraph?.nodes)) {
+        setPayload["draftGraph.nodes"] = body.draftGraph.nodes;
+      }
+      if (Array.isArray(body?.draftGraph?.edges)) {
+        setPayload["draftGraph.edges"] = body.draftGraph.edges;
+      }
+    }
+
     const wf = await NocodeWorkflow.findOneAndUpdate(
       { _id: id, userId: auth.userId },
       {
-        $set: {
-          name: typeof body?.name === "string" ? body.name : undefined,
-          "draftGraph.nodes": Array.isArray(body?.draftGraph?.nodes) ? body.draftGraph.nodes : [],
-          "draftGraph.edges": Array.isArray(body?.draftGraph?.edges) ? body.draftGraph.edges : [],
-          updatedAt: new Date(),
-        },
+        $set: setPayload,
       },
       { new: true }
     );
