@@ -55,7 +55,7 @@ export default class ChartBlockTool {
 
     this.root = createRoot(this.wrapper);
     this.root.render(
-      <div className="rounded-2xl  bg-transparent p-2 shadow-sm">
+      <div className="rounded-2xl  bg-transparent p-1 w-220 shadow-sm">
         <ChartView databaseId={databaseId} projectId={projectId} />
       </div>
     );

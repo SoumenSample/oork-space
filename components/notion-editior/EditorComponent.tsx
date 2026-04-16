@@ -349,7 +349,7 @@ export default function EditorComponent({ initialData, docId, databaseId, projec
           </span>
         )}
       </div>
-      <div id={holderId} className="editor-box" />
+      <div id={holderId} className="editor-box w-220" />
     
 
       {/* <div className="mt-4 items-center gap-4">

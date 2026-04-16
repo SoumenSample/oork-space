@@ -141,7 +141,6 @@ export default function DocumentationView({
   const [pageMargin, setPageMargin]   = useState(72);
   const [pageOrientation, setPageOrientation] = useState<"portrait"|"landscape">("portrait");
   const [pageBgColor, setPageBgColor] = useState("#ffffff");
-  const [textColor, setTextColor]     = useState("#000000");
   const [isListening, setIsListening] = useState(false);
 
   const editorRef    = useRef<HTMLDivElement>(null);
@@ -149,10 +148,85 @@ export default function DocumentationView({
   const imgUploadRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const savedRangeRef = useRef<Range | null>(null);
+  const isAutoPaginatingRef = useRef(false);
+  const autoPaginateRafRef = useRef<number | null>(null);
   const lastLocalEditAtRef = useRef<number>(Date.now());
   const lastAppliedRemoteSnapshotRef = useRef<string>("");
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
+
+  const getNodeRenderHeight = useCallback((node: ChildNode): number => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent?.trim();
+      if (!text) return 0;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rect = range.getBoundingClientRect();
+      return rect.height;
+    }
+
+    const el = node as HTMLElement;
+    if (el.dataset.autoPageBreak === "true") return 0;
+    const rect = el.getBoundingClientRect();
+    const cs = window.getComputedStyle(el);
+    const mt = Number.parseFloat(cs.marginTop) || 0;
+    const mb = Number.parseFloat(cs.marginBottom) || 0;
+    return rect.height + mt + mb;
+  }, []);
+
+  const autoPaginateContent = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor || isAutoPaginatingRef.current) return;
+
+    isAutoPaginatingRef.current = true;
+    try {
+      editor.querySelectorAll('[data-auto-page-break="true"]').forEach(node => node.remove());
+
+      const currentPageH = pageOrientation === "portrait" ? 1123 : 794;
+      const maxContentHeight = Math.max(320, currentPageH - (pageMargin * 2));
+      let usedHeight = 0;
+      const nodes = Array.from(editor.childNodes);
+
+      nodes.forEach((node) => {
+        const h = getNodeRenderHeight(node);
+        if (h <= 0) return;
+
+        if (usedHeight > 0 && usedHeight + h > maxContentHeight) {
+          const pageBreak = document.createElement("div");
+          const bleed = Math.max(24, pageMargin);
+          const gapHeight = Math.max(52, Math.round(pageMargin * 0.9));
+          pageBreak.dataset.autoPageBreak = "true";
+          pageBreak.contentEditable = "false";
+          pageBreak.style.width = `calc(100% + ${bleed * 2}px)`;
+          pageBreak.style.height = `${gapHeight}px`;
+          pageBreak.style.margin = `${Math.max(12, pageMargin * 0.14)}px -${bleed}px`;
+          pageBreak.style.background = isDark ? "#0f172a" : "#eef1f5";
+          pageBreak.style.borderTop = isDark ? "1px solid #334155" : "1px solid #cbd5e1";
+          pageBreak.style.borderBottom = isDark ? "1px solid #334155" : "1px solid #cbd5e1";
+          pageBreak.style.boxShadow = isDark
+            ? "inset 0 8px 12px rgba(15,23,42,0.35), inset 0 -8px 12px rgba(15,23,42,0.35)"
+            : "inset 0 8px 12px rgba(148,163,184,0.18), inset 0 -8px 12px rgba(148,163,184,0.18)";
+          pageBreak.style.pointerEvents = "none";
+          editor.insertBefore(pageBreak, node);
+          usedHeight = 0;
+        }
+
+        usedHeight += h;
+      });
+    } finally {
+      isAutoPaginatingRef.current = false;
+    }
+  }, [getNodeRenderHeight, isDark, pageMargin, pageOrientation]);
+
+  const scheduleAutoPaginate = useCallback(() => {
+    if (autoPaginateRafRef.current !== null) {
+      cancelAnimationFrame(autoPaginateRafRef.current);
+    }
+    autoPaginateRafRef.current = requestAnimationFrame(() => {
+      autoPaginateRafRef.current = null;
+      autoPaginateContent();
+    });
+  }, [autoPaginateContent]);
 
   // ── Close menus on outside click ──
   useEffect(() => {
@@ -161,6 +235,14 @@ export default function DocumentationView({
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (autoPaginateRafRef.current !== null) {
+        cancelAnimationFrame(autoPaginateRafRef.current);
+      }
+    };
   }, []);
 
   // ── Load from DB ──
@@ -194,18 +276,19 @@ export default function DocumentationView({
 
   updateOutline();
   updateWordCount();
+  scheduleAutoPaginate();
 }
         } else if (editorRef.current) {
           const tmpl = templateName === "resume" ? "resume" : templateName === "report" ? "report" : "blank";
           editorRef.current.innerHTML = TEMPLATE_HTML[tmpl] || TEMPLATE_HTML.blank;
-          updateOutline(); updateWordCount();
+          updateOutline(); updateWordCount(); scheduleAutoPaginate();
           editorRef.current.focus();
         }
       } catch (e) { console.error("Load failed:", e); }
       finally { setLoadedOnce(true); }
     };
     setTimeout(load, 100);
-  }, [databaseId, templateName]);
+  }, [databaseId, templateName, scheduleAutoPaginate]);
 
   useEffect(() => {
     if (!loadedOnce) return;
@@ -307,6 +390,7 @@ export default function DocumentationView({
           editorRef.current.innerHTML = remote.content;
           updateOutline();
           updateWordCount();
+          scheduleAutoPaginate();
         }
       } catch {
         // Ignore transient collaborator polling errors.
@@ -321,28 +405,177 @@ export default function DocumentationView({
       cancelled = true;
       clearInterval(t);
     };
-  }, [databaseId, loadedOnce, updateOutline, updateWordCount]);
+  }, [databaseId, loadedOnce, scheduleAutoPaginate, updateOutline, updateWordCount]);
 
+  // const exec = useCallback((cmd: string, val?: string) => {
+  //   if (savedRangeRef.current) {
+  //     const selection = window.getSelection();
+  //     if (selection) {
+  //       selection.removeAllRanges();
+  //       selection.addRange(savedRangeRef.current);
+  //     }
+  //   }
+
+  //   document.execCommand("styleWithCSS", false, "true");
+  //   document.execCommand(cmd, false, val);
+
+  //   const selection = window.getSelection();
+  //   if (selection && selection.rangeCount > 0) {
+  //     savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+  //   }
+
+  //   editorRef.current?.focus();
+  //   updateWordCount(); updateOutline(); scheduleAutoPaginate(); scheduleSave();
+  // }, [updateWordCount, updateOutline, scheduleAutoPaginate, scheduleSave]);
   const exec = useCallback((cmd: string, val?: string) => {
-    if (savedRangeRef.current) {
-      const selection = window.getSelection();
-      if (selection) {
-        selection.removeAllRanges();
-        selection.addRange(savedRangeRef.current);
-      }
-    }
+  const editor = editorRef.current;
+  if (!editor) return;
 
-    document.execCommand("styleWithCSS", false, "true");
-    document.execCommand(cmd, false, val);
-
+  const applyListFormat = (listTag: "ul" | "ol") => {
     const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+    const range = selection && selection.rangeCount > 0 && isRangeInEditor(selection.getRangeAt(0))
+      ? selection.getRangeAt(0).cloneRange()
+      : savedRangeRef.current?.cloneRange() ?? null;
+
+    if (!range || !isRangeInEditor(range)) return false;
+
+    const blocks = Array.from(editor.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li"))
+      .filter((node): node is HTMLElement => {
+        if (!(node instanceof HTMLElement)) return false;
+        if (!range.intersectsNode(node)) return false;
+        if (node.dataset.autoPageBreak === "true") return false;
+        return editor.contains(node);
+      });
+
+    if (blocks.length === 0) return false;
+
+    if (blocks.every(block => block.tagName.toLowerCase() === "li" && block.parentElement?.tagName.toLowerCase() === listTag)) {
+      const affectedLists = new Set<HTMLElement>();
+
+      blocks.forEach((listItem) => {
+        const listElement = listItem.parentElement as HTMLElement | null;
+        if (listElement) affectedLists.add(listElement);
+      });
+
+      affectedLists.forEach((listElement) => {
+        const paragraphs: HTMLElement[] = [];
+        Array.from(listElement.children)
+          .filter((node): node is HTMLLIElement => node.tagName.toLowerCase() === "li")
+          .forEach((listItem) => {
+            const paragraph = document.createElement("p");
+            paragraph.innerHTML = listItem.innerHTML || "<br>";
+
+            const itemStyle = listItem.getAttribute("style");
+            if (itemStyle) paragraph.setAttribute("style", itemStyle);
+            if (listItem.className) paragraph.className = listItem.className;
+
+            paragraphs.push(paragraph);
+          });
+
+        if (paragraphs.length === 0) return;
+
+        const fragment = document.createDocumentFragment();
+        paragraphs.forEach(paragraph => fragment.appendChild(paragraph));
+        listElement.replaceWith(fragment);
+      });
+
+      const firstNode = blocks[0].parentElement?.previousElementSibling as HTMLElement | null;
+      if (firstNode) {
+        const nextRange = document.createRange();
+        nextRange.selectNodeContents(firstNode);
+        nextRange.collapse(false);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(nextRange);
+        }
+        savedRangeRef.current = nextRange.cloneRange();
+      }
+
+      syncToolbarFromSelection();
+      updateWordCount();
+      updateOutline();
+      scheduleAutoPaginate();
+      scheduleSave();
+      return true;
     }
 
-    editorRef.current?.focus();
-    updateWordCount(); updateOutline(); scheduleSave();
-  }, [updateWordCount, updateOutline, scheduleSave]);
+    const firstBlock = blocks[0];
+    if (!firstBlock) return false;
+
+    const list = document.createElement(listTag);
+    list.style.listStylePosition = "outside";
+    list.style.paddingLeft = "1.5rem";
+    list.style.margin = "0.5rem 0";
+    list.style.color = "#000";
+
+    firstBlock.before(list);
+
+    blocks.forEach((block) => {
+      const item = document.createElement("li");
+      item.innerHTML = block.innerHTML || "<br>";
+
+      const blockStyle = block.getAttribute("style");
+      if (blockStyle) item.setAttribute("style", blockStyle);
+      if (block.className) item.className = block.className;
+
+      item.style.display = "list-item";
+      item.style.color = "#000";
+      list.appendChild(item);
+
+      if (block.parentElement) {
+        block.remove();
+      }
+    });
+
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(list.lastElementChild ?? list);
+    nextRange.collapse(false);
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+    }
+    savedRangeRef.current = nextRange.cloneRange();
+
+    syncToolbarFromSelection();
+    updateWordCount();
+    updateOutline();
+    scheduleAutoPaginate();
+    scheduleSave();
+    return true;
+  };
+
+  editor.focus(); // 🔥 IMPORTANT FIX
+
+  if (savedRangeRef.current) {
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(savedRangeRef.current);
+    }
+  }
+
+  document.execCommand("styleWithCSS", false, "true");
+
+  if (cmd === "insertUnorderedList") {
+    if (applyListFormat("ul")) return;
+  }
+
+  if (cmd === "insertOrderedList") {
+    if (applyListFormat("ol")) return;
+  }
+
+  document.execCommand(cmd, false, val);
+
+  const selection = window.getSelection();
+  if (selection && selection.rangeCount > 0) {
+    savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+  }
+
+  updateWordCount();
+  updateOutline();
+  scheduleAutoPaginate();
+  scheduleSave();
+}, []);
 
   const getSelectionElement = useCallback((): HTMLElement | null => {
     const sel = window.getSelection();
@@ -608,8 +841,14 @@ export default function DocumentationView({
     if (container.nodeType === 3) container = container.parentElement!;
     const block = container.closest("p,h1,h2,h3,h4,h5,h6,li,div") as HTMLElement;
     if (block) block.style.lineHeight = val;
+    scheduleAutoPaginate();
     scheduleSave();
-  }, [scheduleSave]);
+  }, [scheduleAutoPaginate, scheduleSave]);
+
+  useEffect(() => {
+    if (!loadedOnce) return;
+    scheduleAutoPaginate();
+  }, [loadedOnce, lineSpacing, pageMargin, pageOrientation, scheduleAutoPaginate]);
 
   const insertTable = useCallback(() => {
     let html = `<table style="border-collapse:collapse;width:100%;margin:8px 0"><tbody>`;
@@ -841,6 +1080,15 @@ export default function DocumentationView({
 
   const pageW = pageOrientation === "portrait" ? 794 : 1123;
   const pageH = pageOrientation === "portrait" ? 1123 : 794;
+  const pageContentMinHeight = Math.max(320, pageH - (pageMargin * 2));
+
+  const handleEditorKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter") return;
+    // Wait for the new paragraph to be inserted, then paginate if needed.
+    requestAnimationFrame(() => {
+      scheduleAutoPaginate();
+    });
+  }, [scheduleAutoPaginate]);
 
   // ── Mode badge colors ──
   const modeBadge = {
@@ -850,10 +1098,10 @@ export default function DocumentationView({
   }[mode];
 
   return (
-    <div className={`flex flex-col h-full overflow-hidden font-sans ${isDark ? "bg-zinc-900 text-white" : "bg-[#eef0f3] text-gray-900"}`}>
+    <div className={`flex flex-col h-[200dvh] overflow-hidden font-sans ${isDark ? "bg-zinc-900 text-white" : "bg-[#eef0f3] text-gray-900"}`}>
 
       {/* ══ TITLE BAR ══ */}
-      <div className="sticky top-0 shrink-0">
+      <div className="sticky top-0 z-[70] shrink-0">
       <div className={`flex items-center gap-3 px-4 py-2.5 shrink-0 shadow-sm ${isDark ? "bg-zinc-900 border-b border-slate-700" : "bg-white border-b border-gray-200/80"}`}>
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm shrink-0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
@@ -1053,7 +1301,6 @@ export default function DocumentationView({
           <TB title="Print (Ctrl+P)" onClick={printDoc}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           </TB>
-
           <div className={`w-px h-5 mx-0.5 ${isDark ? "bg-slate-600" : "bg-gray-200"}`}/>
 
           <select value={currentStyle} onMouseDown={captureEditorSelection} onChange={e => { const s = PARA_STYLES.find(p => p.label === e.target.value); if(s) applyParaStyle(s); }} disabled={isViewOnly}
@@ -1090,12 +1337,12 @@ export default function DocumentationView({
           {/* Color pickers */}
           <div className="flex flex-col items-center gap-0.5" title="Text color">
             <span className="text-[8px] text-gray-400 leading-none">A</span>
-            <input type="color" defaultValue="#000000" onChange={e => { setTextColor(e.target.value); exec("foreColor", e.target.value); }} disabled={isViewOnly}
+            <input type="color" defaultValue="#000000" onMouseDown={captureEditorSelection} onChange={e => { exec("foreColor", e.target.value); }} disabled={isViewOnly}
               className="w-6 h-4 rounded cursor-pointer border-0 p-0" style={{padding:0}}/>
           </div>
           <div className="flex flex-col items-center gap-0.5" title="Highlight">
             <span className="text-[8px] text-gray-400 leading-none">H</span>
-            <input type="color" defaultValue="#ffff00" onChange={e => exec("hiliteColor", e.target.value)} disabled={isViewOnly}
+            <input type="color" defaultValue="#ffff00" onMouseDown={captureEditorSelection} onChange={e => exec("hiliteColor", e.target.value)} disabled={isViewOnly}
               className="w-6 h-4 rounded cursor-pointer border-0 p-0" style={{padding:0}}/>
           </div>
           <div className="flex flex-col items-center gap-0.5" title="Page background">
@@ -1275,18 +1522,18 @@ export default function DocumentationView({
                 contentEditable={!isViewOnly}
                 suppressContentEditableWarning
                 onInput={() => { updateWordCount(); updateOutline(); scheduleSave(); syncToolbarFromSelection(); }}
+                onKeyDown={handleEditorKeyDown}
                 onKeyUp={() => { updateWordCount(); syncToolbarFromSelection(); }}
                 onClick={() => editorRef.current?.focus()}
                 onMouseUp={syncToolbarFromSelection}
                 tabIndex={0}
                 style={{
                   outline: "none",
-                  minHeight: 400,
+                  minHeight: pageContentMinHeight,
                   // fontFamily: currentFont,
                   // fontSize: `${currentSize}pt`,
                   lineHeight: lineSpacing,
                   wordBreak: "break-word",
-                  color: textColor,
                   cursor: isViewOnly ? "default" : "text",
                 }}
                 className="doc-editor"

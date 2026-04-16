@@ -12,6 +12,8 @@ type Panel = "text" | "elements" | "stickers" | "bg" | "ai" | "brand" | "layers"
 
 interface CanvasElement {
   id: string; type: ElementType; content: string;
+  isBrandLogo?: boolean;
+  textBgColor?: string;
   x: number; y: number; width: number; height: number; rotation: number;
   fontSize?: number; fontFamily?: string; color?: string;
   bold?: boolean; italic?: boolean; underline?: boolean;
@@ -25,7 +27,7 @@ interface CanvasElement {
   dropShadow?: boolean; shadowColor?: string; shadowBlur?: number;
 }
 interface Background { type: "color"|"gradient"|"image"|"pattern"; value: string; opacity: number; }
-interface BrandKit { name: string; colors: string[]; primaryFont: string; secondaryFont: string; logoUrl: string|null; }
+interface BrandKit { name: string; colors: string[]; primaryFont: string; secondaryFont: string; logoUrl: string|null; logoRadius?: number; }
 interface SchedulePost { id: string; platformId: number; date: string; time: string; caption: string; hashtags: string; status: "draft"|"scheduled"; }
 interface AssetItem { id: string; name: string; url: string; }
 interface CollabComment { id: string; author: string; text: string; ts: string; }
@@ -181,6 +183,7 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
 
   const sel    = elements.find(e => e.id === selectedId);
   const sorted = [...elements].sort((a,b) => a.zIndex - b.zIndex);
+ 
 
   // ── Inject animation keyframes ────────────────────────────────────────
   useEffect(() => {
@@ -306,7 +309,12 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
     if (!sel) return;
     addEl({...sel, id:`${Date.now()}`, x:sel.x+16, y:sel.y+16, zIndex:nextZ()});
   };
-
+const rotating = useRef<{
+  id: string;
+  cx: number;
+  cy: number;
+  prevAngle: number;
+} | null>(null);
   // ── Drag & Resize ─────────────────────────────────────────────────────
   const SNAP_THRESHOLD = 6;
   const onElDown = (e: React.MouseEvent, id: string) => {
@@ -338,25 +346,73 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
       if (el && Math.abs((ny+el.height/2)-cy)<SNAP_THRESHOLD) { ny=cy-el.height/2; setSnapY(cy); } else setSnapY(null);
       updateEl(id, {x:nx, y:ny});
     }
+if (rotating.current) {
+  const { id, cx, cy, prevAngle } = rotating.current;
+
+  const currentAngle =
+    Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+
+  let delta = currentAngle - prevAngle;
+
+  // ✅ Fix jump at -180 ↔ 180
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+
+  const el = elements.find(el => el.id === id);
+  if (!el) return;
+
+  const newRotation = el.rotation + delta;
+
+  updateEl(id, { rotation: newRotation });
+
+  // update previous angle
+  rotating.current.prevAngle = currentAngle;
+}
     if (resizing.current) {
       const {id,ox,oy,ew,eh} = resizing.current;
       updateEl(id, {width:Math.max(30,ew+(e.clientX-ox)/scale), height:Math.max(20,eh+(e.clientY-oy)/scale)});
     }
   }, [zoom, elements, platform]);
+  
+const onRotateDown = (e: React.MouseEvent, id: string) => {
+  e.stopPropagation();
 
-  const onMouseUp = () => {
-    if (dragging.current||resizing.current) {
-      commit(elements);
-      dragging.current=null; resizing.current=null;
-      setSnapX(null); setSnapY(null);
-    }
-  };
+  const el = elements.find(el => el.id === id);
+  if (!el) return;
+
+  const rect = canvasRef.current?.getBoundingClientRect();
+  if (!rect) return;
+
+  const scale = zoom / 100;
+
+  const cx = rect.left + (el.x + el.width / 2) * scale;
+  const cy = rect.top + (el.y + el.height / 2) * scale;
+
+  const startAngle =
+    Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+
+  rotating.current = { id, cx, cy, prevAngle: startAngle };
+};
+
+
+const onMouseUp = () => {
+  if (dragging.current || resizing.current || rotating.current) {
+    commit(elements);
+
+    dragging.current = null;
+    resizing.current = null;
+    rotating.current = null;
+
+    setSnapX(null);
+    setSnapY(null);
+  }
+};
 
   // ── Add helpers ───────────────────────────────────────────────────────
   const addText = (preset?: Partial<CanvasElement>) =>
-    addEl(makeEl("text",{content:"New Text",x:50,y:50,width:220,height:56,fontSize:24,fontFamily:"Arial",color:"#ffffff",textAlign:"center",...preset}));
+    addEl(makeEl("text",{content:"New Text",x:50,y:50,width:220,height:56,fontSize:24,fontFamily:"Arial",color:"#000",textAlign:"center",...preset}));
   const addShape = (shapeType: ShapeType) =>
-    addEl(makeEl("shape",{x:80,y:80,width:120,height:80,shapeType,fill:"#3b82f6",stroke:"transparent",strokeWidth:0}));
+    addEl(makeEl("shape",{x:80,y:80,width:120,height:80,shapeType,fill:"transparent",stroke:"#000",strokeWidth:2}));
   const addSticker = (s: string) =>
     addEl(makeEl("emoji",{content:s,x:70,y:70,width:64,height:64,fontSize:52}));
   const addImageFile = (file: File) => {
@@ -396,6 +452,24 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
     setShowBrandSaved(true);
     setTimeout(() => setShowBrandSaved(false), 2000);
   };
+
+  // Keep brand logo elements in sync with Brand Kit edits (live radius/content updates).
+  useEffect(() => {
+    const logoUrl = brandKit.logoUrl;
+    if (!logoUrl) return;
+    setElements(prev =>
+      prev.map(el =>
+        el.type === "image" && (el.isBrandLogo || el.content === logoUrl)
+          ? {
+              ...el,
+              isBrandLogo: true,
+              content: logoUrl,
+              borderRadius: brandKit.logoRadius || 0,
+            }
+          : el
+      )
+    );
+  }, [brandKit.logoUrl, brandKit.logoRadius]);
 
   // ── AI: generate content ──────────────────────────────────────────────
   const callAI = async (prompt: string): Promise<string> => {
@@ -499,10 +573,10 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
   // ── Shape SVG ─────────────────────────────────────────────────────────
   const renderShape = (el: CanvasElement) => {
     const w=el.width,h=el.height,sw=el.strokeWidth||0;
-    const fill=el.fill||"#3b82f6",stroke=el.stroke||"transparent";
+    const fill = el.fill === "transparent" ? "none" : el.fill || "#3b82f6",stroke=el.stroke||"transparent";
     return (
       <svg width={w} height={h} style={{display:"block",overflow:"visible"}}>
-        {el.shapeType==="rectangle"&&<rect x={sw/2} y={sw/2} width={w-sw} height={h-sw} fill={fill} stroke={stroke} strokeWidth={sw} rx={4}/>}
+        {el.shapeType==="rectangle"&&<rect x={sw/2} y={sw/2} width={w-sw} height={h-sw} fill={fill} stroke={stroke} strokeWidth={sw} rx={el.borderRadius || 0}/>}
         {el.shapeType==="circle"   &&<ellipse cx={w/2} cy={h/2} rx={(w-sw)/2} ry={(h-sw)/2} fill={fill} stroke={stroke} strokeWidth={sw}/>}
         {el.shapeType==="triangle" &&<polygon points={`${w/2},${sw} ${w-sw},${h-sw} ${sw},${h-sw}`} fill={fill} stroke={stroke} strokeWidth={sw}/>}
         {el.shapeType==="line"     &&<line x1={sw} y1={h/2} x2={w-sw} y2={h/2} stroke={fill} strokeWidth={Math.max(sw,3)}/>}
@@ -703,6 +777,32 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
                       ))}
                     </div>
                     <SL label="Color"/>
+                    <div className="flex items-center gap-2">
+  <span className="text-[9px] text-gray-500">BG</span>
+
+  <input
+    type="color"
+    value={sel.textBgColor || "#000000"}
+    onChange={(e) =>
+      updateElCommit(sel.id, {
+        textBgColor: e.target.value,
+      })
+    }
+    className="flex-1 h-6 rounded border border-white/8 cursor-pointer bg-transparent"
+  />
+
+  {/* remove background */}
+  <button
+    onClick={() =>
+      updateElCommit(sel.id, {
+        textBgColor: "transparent",
+      })
+    }
+    className="text-[9px] px-2 py-1 bg-white/10 rounded"
+  >
+    ✕
+  </button>
+</div>
                     <div className="grid grid-cols-10 gap-0.5">
                       {COLORS.map(c=>(
                         <button key={c} onClick={()=>updateElCommit(sel.id,{color:c})}
@@ -762,6 +862,27 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
                 {sel?.type==="shape" && (
                   <div className="space-y-2 pt-2 border-t border-white/[0.05]">
                     <SL label="Shape Fill"/>
+                    <div className="flex items-center gap-2">
+  <span className="text-[9px] text-gray-500 w-12">Radius</span>
+
+  <input
+    type="range"
+    min={0}
+    max={100}
+    value={sel.borderRadius || 0}
+    onChange={(e) =>
+      updateEl(sel.id, {
+        borderRadius: Number(e.target.value),
+      })
+    }
+    onMouseUp={() => commit(elements)}
+    className="flex-1 h-1 accent-violet-500"
+  />
+
+  <span className="text-[9px] text-gray-400 w-6">
+    {sel.borderRadius || 0}
+  </span>
+</div>
                     <div className="grid grid-cols-10 gap-0.5">
                       {COLORS.map(c=>(
                         <button key={c} onClick={()=>updateElCommit(sel.id,{fill:c})}
@@ -957,6 +1078,27 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
             {/* ── BRAND KIT PANEL ────────────────────────────────────── */}
             {activePanel==="brand" && (
               <div className="space-y-2.5">
+                <div className="flex items-center gap-2 mt-2">
+  <span className="text-[9px] text-gray-500 w-12">Radius</span>
+
+  <input
+    type="range"
+    min={0}
+    max={100}
+    value={brandKit.logoRadius || 0}
+    onChange={(e) =>
+      setBrandKit((prev) => ({
+        ...prev,
+        logoRadius: Number(e.target.value),
+      }))
+    }
+    className="flex-1 h-1 accent-violet-500"
+  />
+
+  <span className="text-[9px] text-gray-400 w-6">
+    {brandKit.logoRadius || 0}
+  </span>
+</div>
                 <div className="flex items-center gap-2">
                   <input value={brandKit.name} onChange={e=>setBrandKit(b=>({...b,name:e.target.value}))}
                     className="flex-1 text-[10px] bg-[#1a1a26] border border-white/8 text-white rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500"
@@ -999,7 +1141,7 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
 
                 <SL label="Brand Logo"/>
                 {brandKit.logoUrl
-                  ? <div className="relative"><img src={brandKit.logoUrl} className="w-full h-16 object-contain rounded-xl bg-white/5 border border-white/8"/>
+                  ? <div className="relative"><img src={brandKit.logoUrl}  className="w-full h-16 object-contain bg-white/5 border border-white/8" style={{borderRadius: brandKit.logoRadius || 0}}/>
                       <button onClick={()=>setBrandKit(b=>({...b,logoUrl:null}))} className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center">✕</button>
                     </div>
                   : <label className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-white/4 hover:bg-white/8 border-dashed border-2 border-white/10 text-[10px] text-gray-400 cursor-pointer transition">
@@ -1015,7 +1157,16 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
 
                 {/* Logo on canvas */}
                 {brandKit.logoUrl && (
-                  <button onClick={()=>addEl(makeEl("image",{content:brandKit.logoUrl!,x:10,y:10,width:80,height:50,borderRadius:8}))}
+                  <button onClick={()=>addEl(makeEl("image", {
+          content: brandKit.logoUrl!,
+          x: 10,
+          y: 10,
+          width: 80,
+          height: 50,
+            borderRadius: brandKit.logoRadius || 0,
+            isBrandLogo: true,
+        }))
+     }
                     className="w-full py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-[10px] transition border border-white/8">
                     + Add Logo to Canvas
                   </button>
@@ -1222,27 +1373,183 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
                   ? { filter:`drop-shadow(0 4px ${el.shadowBlur||8}px ${el.shadowColor||"rgba(0,0,0,0.6)"})` }
                   : {};
                 return (
-                  <div key={el.id} data-el-id={el.id} style={{
-                    position:"absolute", left:el.x, top:el.y,
-                    width:el.width, minHeight:el.height,
-                    opacity:el.opacity/100, zIndex:el.zIndex,
-                    transform:`rotate(${el.rotation}deg) scaleX(${el.flipH?-1:1}) scaleY(${el.flipV?-1:1})`,
-                    cursor:el.locked?"not-allowed":"move",
-                    mixBlendMode:(el.blendMode||"normal") as any,
-                    ...animStyle, ...shadowStyle,
-                  }}
-                    onMouseDown={e=>{if(!el.locked)onElDown(e,el.id);}}
-                    onDoubleClick={()=>{if(el.type==="text")setEditingId(el.id);}}
-                    className={isSelected&&!el.locked?"ring-1 ring-violet-400 ring-offset-1 ring-offset-transparent":""}>
+                  <>
+                 {/* <div
+  onMouseDown={(e) => onElDown(e, el.id)}
+  style={{
+    position: "absolute",
+    left: el.x,
+    top: el.y,
+    transform: `rotate(${el.rotation}deg)`,
+  }}
+> */}
+<div
+  key={el.id}
+  onMouseDown={(e) => onElDown(e, el.id)}
+  style={{
+    position: "absolute",
+    left: el.x,
+    top: el.y,
+    width: el.width,
+    height: el.height,
+    transform: `rotate(${el.rotation}deg)`,
+  }}
+>
+    {selectedId === el.id && (
+    <div className="absolute inset-0 border-2 border-blue-500 pointer-events-none" />
+  )}
 
-                    {el.type==="text" && (isEditing ? (
-                      <textarea autoFocus value={el.content}
-                        onChange={e=>updateEl(el.id,{content:e.target.value})}
-                        onBlur={()=>{setEditingId(null);commit(elements);}}
-                        style={{width:"100%",minHeight:el.height,fontSize:el.fontSize,fontFamily:el.fontFamily,color:el.color,fontWeight:el.bold?"bold":"normal",fontStyle:el.italic?"italic":"normal",textDecoration:el.underline?"underline":"none",textAlign:el.textAlign||"left",letterSpacing:el.letterSpacing?`${el.letterSpacing}px`:undefined,lineHeight:el.lineHeight||1.4,background:"transparent",border:"none",outline:"none",resize:"none",textShadow:el.textShadow?"2px 2px 10px rgba(0,0,0,0.9)":"none",WebkitTextStroke:el.textStroke?`1.5px ${el.textStrokeColor||"#000"}`:"none"}}/>
-                    ) : (
-                      <div style={{fontSize:el.fontSize,fontFamily:el.fontFamily,color:el.color,fontWeight:el.bold?"bold":"normal",fontStyle:el.italic?"italic":"normal",textDecoration:el.underline?"underline":"none",textAlign:el.textAlign||"left",letterSpacing:el.letterSpacing?`${el.letterSpacing}px`:undefined,lineHeight:el.lineHeight||1.4,whiteSpace:"pre-wrap",textShadow:el.textShadow?"2px 2px 10px rgba(0,0,0,0.9)":"none",WebkitTextStroke:el.textStroke?`1.5px ${el.textStrokeColor||"#000"}`:"none",padding:"2px"}}>{el.content}</div>
-                    ))}
+  {/* ✅ RESIZE HANDLES */}
+  {selectedId === el.id && (
+    <>
+      {/* Top-left */}
+      <div
+        data-resize
+        onMouseDown={(e) => onResizeDown(e, el.id)}
+        className="absolute w-3 h-3 bg-white border border-black -top-1.5 -left-1.5 cursor-nwse-resize"
+      />
+
+      {/* Top-right */}
+      <div
+        data-resize
+        onMouseDown={(e) => onResizeDown(e, el.id)}
+        className="absolute w-3 h-3 bg-white border border-black -top-1.5 -right-1.5 cursor-nesw-resize"
+      />
+
+      {/* Bottom-left */}
+      <div
+        data-resize
+        onMouseDown={(e) => onResizeDown(e, el.id)}
+        className="absolute w-3 h-3 bg-white border border-black -bottom-1.5 -left-1.5 cursor-nesw-resize"
+      />
+
+      {/* Bottom-right */}
+      <div
+        data-resize
+        onMouseDown={(e) => onResizeDown(e, el.id)}
+        className="absolute w-3 h-3 bg-white border border-black -bottom-1.5 -right-1.5 cursor-nwse-resize"
+      />
+    </>
+  )}
+  {/* 🔥 ROTATE BUTTON */}
+  {/* {selectedId === el.id && (
+    <button
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        updateElCommit(el.id, {
+          rotation: (el.rotation || 0) + 15,
+        });
+      }}
+      style={{
+        position: "absolute",
+        top: -20,
+        right: -20,
+        width: 24,
+        height: 24,
+        borderRadius: "50%",
+        background: "#000",
+        color: "#fff",
+        fontSize: 12,
+        cursor: "pointer",
+      }}
+    >
+      ⟳
+    </button>
+  )} */}
+
+  {selectedId === el.id && (
+    
+  <div
+    onMouseDown={(e) => onRotateDown(e, el.id)}
+    style={{
+        position: "absolute",
+        top: -20,
+        right: -25,
+        width: 20,
+        height: 20,
+        borderRadius: "50%",
+        // background: "#000",
+        color: "#000",
+        fontSize: 17,
+        cursor: "pointer",
+      }}
+  >
+    ⟳
+  </div>
+)}
+ {el.type === "text" && (() => {
+  const isEditing = editingId === el.id;
+
+  return isEditing ? (
+    <textarea
+      autoFocus
+      value={el.content}
+      onChange={(e) =>
+        updateEl(el.id, { content: e.target.value })
+      }
+      onBlur={() => {
+        setEditingId(null);
+        commit(elements);
+      }}
+      style={{
+        width: "100%",
+        minHeight: el.height,
+        fontSize: el.fontSize,
+        fontFamily: el.fontFamily,
+        backgroundColor: el.textBgColor || "transparent",
+        color: el.color,
+        fontWeight: el.bold ? "bold" : "normal",
+        fontStyle: el.italic ? "italic" : "normal",
+        textDecoration: el.underline ? "underline" : "none",
+        textAlign: el.textAlign || "left",
+        letterSpacing: el.letterSpacing
+          ? `${el.letterSpacing}px`
+          : undefined,
+        lineHeight: el.lineHeight || 1.4,
+        background: "transparent",
+        border: "none",
+        outline: "none",
+        resize: "none",
+        textShadow: el.textShadow
+          ? "2px 2px 10px rgba(0,0,0,0.9)"
+          : "none",
+        WebkitTextStroke: el.textStroke
+          ? `1.5px ${el.textStrokeColor || "#000"}`
+          : "none",
+      }}
+    />
+  ) : (
+    <div
+      onDoubleClick={() => setEditingId(el.id)}  // 🔥 IMPORTANT
+      style={{
+        fontSize: el.fontSize,
+        fontFamily: el.fontFamily,
+         
+        color: el.color,
+        fontWeight: el.bold ? "bold" : "normal",
+        fontStyle: el.italic ? "italic" : "normal",
+        textDecoration: el.underline ? "underline" : "none",
+        textAlign: el.textAlign || "left",
+        letterSpacing: el.letterSpacing
+          ? `${el.letterSpacing}px`
+          : undefined,
+        lineHeight: el.lineHeight || 1.4,
+        whiteSpace: "pre-wrap",
+        textShadow: el.textShadow
+          ? "2px 2px 10px rgba(0,0,0,0.9)"
+          : "none",
+        WebkitTextStroke: el.textStroke
+          ? `1.5px ${el.textStrokeColor || "#000"}`
+          : "none",
+        padding: "2px",
+         backgroundColor: el.textBgColor || "transparent",
+        cursor: "text", // UX improvement
+      }}
+    >
+      {el.content}
+    </div>
+  );
+})()}
                     {el.type==="emoji" && <div style={{fontSize:el.fontSize||48,lineHeight:1,userSelect:"none"}}>{el.content}</div>}
                     {el.type==="shape" && renderShape(el)}
                     {el.type==="image" && <img src={el.content} alt="" draggable={false} style={{width:el.width,height:el.height,objectFit:"cover",display:"block",borderRadius:el.borderRadius||0}}/>}
@@ -1256,7 +1563,10 @@ export default function SocialMediaView({ databaseId }: { databaseId: string }) 
                         <div className="absolute -top-5 left-1/2 -translate-x-1/2 w-1 h-4 border-l border-dashed border-violet-400/60 pointer-events-none"/>
                       </>
                     )}
-                  </div>
+  {/* existing content */}
+</div>
+                   </>
+                  // </div>
                 );
               })}
             </div>
