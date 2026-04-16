@@ -7,6 +7,7 @@ import {
   Image, Type, Square, Circle, Minus, Move, Palette, Layout,
   ZoomIn, ZoomOut, RotateCcw, Save, Eye, EyeOff, Grid,
 } from "lucide-react";
+import jsPDF from "jspdf";
 
 interface TextBox {
   id: string;
@@ -92,6 +93,206 @@ function makeSlide(overrides: Partial<Slide> = {}): Slide {
   };
 }
 
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const paragraphs = text.split(/\r?\n/);
+  const lines: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (!paragraph) {
+      lines.push("");
+      continue;
+    }
+
+    const words = paragraph.split(/\s+/);
+    let currentLine = "";
+
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(candidate).width <= maxWidth || !currentLine) {
+        currentLine = candidate;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) lines.push(currentLine);
+  }
+
+  return lines;
+}
+
+function drawTextBox(ctx: CanvasRenderingContext2D, tb: TextBox) {
+  const alpha = Math.max(0, Math.min(1, tb.opacity / 100));
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  if (tb.backgroundColor !== "transparent") {
+    ctx.fillStyle = tb.backgroundColor;
+    ctx.fillRect(tb.x, tb.y, tb.width, tb.height);
+  }
+
+  if (tb.borderWidth > 0 && tb.borderColor !== "transparent") {
+    ctx.strokeStyle = tb.borderColor;
+    ctx.lineWidth = tb.borderWidth;
+    ctx.strokeRect(
+      tb.x + tb.borderWidth / 2,
+      tb.y + tb.borderWidth / 2,
+      tb.width - tb.borderWidth,
+      tb.height - tb.borderWidth,
+    );
+  }
+
+  const fontParts = [
+    tb.italic ? "italic" : "normal",
+    tb.bold ? "bold" : "normal",
+    `${tb.fontSize}px`,
+    tb.fontFamily,
+  ];
+
+  ctx.fillStyle = tb.color;
+  ctx.font = fontParts.join(" ");
+  ctx.textAlign = tb.align;
+  ctx.textBaseline = "top";
+
+  const paddingX = 8;
+  const paddingY = 6;
+  const lines = wrapText(ctx, tb.text, Math.max(0, tb.width - paddingX * 2));
+  const lineHeight = tb.fontSize * 1.4;
+  const totalHeight = Math.max(lineHeight, lines.length * lineHeight);
+  const startY = tb.y + Math.max(paddingY, (tb.height - totalHeight) / 2);
+  const startX = tb.align === "center" ? tb.x + tb.width / 2 : tb.align === "right" ? tb.x + tb.width - paddingX : tb.x + paddingX;
+
+  lines.forEach((line, index) => {
+    const y = startY + index * lineHeight;
+    ctx.fillText(line, startX, y);
+
+    if (tb.underline && line) {
+      const textWidth = ctx.measureText(line).width;
+      const underlineY = y + tb.fontSize * 1.15;
+      const underlineX = tb.align === "center"
+        ? startX - textWidth / 2
+        : tb.align === "right"
+          ? startX - textWidth
+          : startX;
+
+      ctx.beginPath();
+      ctx.moveTo(underlineX, underlineY);
+      ctx.lineTo(underlineX + textWidth, underlineY);
+      ctx.lineWidth = Math.max(1, tb.fontSize / 12);
+      ctx.strokeStyle = tb.color;
+      ctx.stroke();
+    }
+  });
+
+  ctx.restore();
+}
+
+function drawShape(ctx: CanvasRenderingContext2D, shape: Shape) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, shape.opacity / 100));
+  ctx.fillStyle = shape.fill;
+  ctx.strokeStyle = shape.stroke;
+  ctx.lineWidth = shape.strokeWidth;
+
+  const inset = shape.strokeWidth / 2;
+  ctx.translate(shape.x, shape.y);
+
+  if (shape.type === "rectangle") {
+    ctx.fillRect(0, 0, shape.width, shape.height);
+    if (shape.strokeWidth > 0) {
+      ctx.strokeRect(inset, inset, shape.width - shape.strokeWidth, shape.height - shape.strokeWidth);
+    }
+  } else if (shape.type === "circle") {
+    ctx.beginPath();
+    ctx.ellipse(shape.width / 2, shape.height / 2, (shape.width - shape.strokeWidth) / 2, (shape.height - shape.strokeWidth) / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (shape.strokeWidth > 0) ctx.stroke();
+  } else if (shape.type === "triangle") {
+    ctx.beginPath();
+    ctx.moveTo(shape.width / 2, inset);
+    ctx.lineTo(shape.width - inset, shape.height - inset);
+    ctx.lineTo(inset, shape.height - inset);
+    ctx.closePath();
+    ctx.fill();
+    if (shape.strokeWidth > 0) ctx.stroke();
+  } else if (shape.type === "line") {
+    ctx.beginPath();
+    ctx.moveTo(inset, shape.height / 2);
+    ctx.lineTo(shape.width - inset, shape.height / 2);
+    ctx.stroke();
+  } else if (shape.type === "star") {
+    ctx.beginPath();
+    ctx.moveTo(shape.width * 0.5, inset);
+    ctx.lineTo(shape.width * 0.62, shape.height * 0.38);
+    ctx.lineTo(shape.width - inset, shape.height * 0.38);
+    ctx.lineTo(shape.width * 0.72, shape.height * 0.62);
+    ctx.lineTo(shape.width * 0.82, shape.height - inset);
+    ctx.lineTo(shape.width * 0.5, shape.height * 0.76);
+    ctx.lineTo(shape.width * 0.18, shape.height - inset);
+    ctx.lineTo(shape.width * 0.28, shape.height * 0.62);
+    ctx.lineTo(inset, shape.height * 0.38);
+    ctx.lineTo(shape.width * 0.38, shape.height * 0.38);
+    ctx.closePath();
+    ctx.fill();
+    if (shape.strokeWidth > 0) ctx.stroke();
+  } else if (shape.type === "arrow") {
+    ctx.beginPath();
+    ctx.moveTo(inset, shape.height / 2);
+    ctx.lineTo(shape.width - 20, shape.height / 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(shape.width, shape.height / 2);
+    ctx.lineTo(shape.width - 20, shape.height / 2 - 10);
+    ctx.lineTo(shape.width - 20, shape.height / 2 + 10);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+async function drawSlideToCanvas(slide: Slide): Promise<HTMLCanvasElement> {
+  const canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 500;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas context is not available");
+
+  ctx.fillStyle = slide.backgroundColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (const shape of slide.shapes) {
+    drawShape(ctx, shape);
+  }
+
+  for (const imageItem of slide.images) {
+    const image = new window.Image();
+    image.crossOrigin = "anonymous";
+
+    await new Promise<void>((resolve) => {
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      image.src = imageItem.src;
+    });
+
+    if (!image.complete || image.naturalWidth === 0) continue;
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, imageItem.opacity / 100));
+    ctx.drawImage(image, imageItem.x, imageItem.y, imageItem.width, imageItem.height);
+    ctx.restore();
+  }
+
+  for (const textBox of slide.textBoxes) {
+    drawTextBox(ctx, textBox);
+  }
+
+  return canvas;
+}
+
 function makeTextBox(overrides: Partial<TextBox> = {}): TextBox {
   return {
     id: Date.now().toString() + Math.random(),
@@ -150,12 +351,38 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
   const canvasRef = useRef<HTMLDivElement>(null);
   const lastLocalEditAtRef = useRef<number>(Date.now());
   const lastAppliedRemoteSnapshotRef = useRef<string>("");
+  const [autoPlay, setAutoPlay] = useState(false);
+const [slideInterval, setSlideInterval] = useState(3000); // 3 sec
+// const [isResizing, setIsResizing] = useState(false);
 
   const slide = slides[currentIndex];
 
   const updateSlide = useCallback((updater: (s: Slide) => Slide) => {
     setSlides((prev) => prev.map((s, i) => i === currentIndex ? updater(s) : s));
   }, [currentIndex]);
+useEffect(() => {
+  if (isFullscreen) {
+    setCurrentIndex(0);  // start from first slide
+    setAutoPlay(true);   // ✅ start auto slide
+  } else {
+    setAutoPlay(false);  // stop when exit
+  }
+}, [isFullscreen]);
+useEffect(() => {
+  if (!autoPlay) return;
+
+  const interval = setInterval(() => {
+    setCurrentIndex((prev) => {
+      if (prev < slides.length - 1) {
+        return prev + 1;
+      } else {
+        return 0; // 🔁 loop from start (optional)
+      }
+    });
+  }, slideInterval);
+
+  return () => clearInterval(interval);
+}, [autoPlay, slides.length, slideInterval]);
 
   const saveToDb = useCallback(async (data: Slide[]) => {
     if (!databaseId) return;
@@ -355,17 +582,103 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
     slide.shapes.find(s => s.id === id) ||
     slide.images.find(i => i.id === id);
 
+  // const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  //   if (!isDragging || !selectedId || !canvasRef.current) return;
+  //   const rect = canvasRef.current.getBoundingClientRect();
+  //   const x = Math.max(0, e.clientX - rect.left - dragOffset.x);
+  //   const y = Math.max(0, e.clientY - rect.top - dragOffset.y);
+  //   const isText = slide.textBoxes.some(t => t.id === selectedId);
+  //   const isShape = slide.shapes.some(s => s.id === selectedId);
+  //   if (isText) updateTextBox(selectedId, { x, y });
+  //   else if (isShape) updateShape(selectedId, { x, y });
+  //   else updateImage(selectedId, { x, y });
+  // }, [isDragging, selectedId, dragOffset, slide]);
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !selectedId || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left - dragOffset.x);
-    const y = Math.max(0, e.clientY - rect.top - dragOffset.y);
-    const isText = slide.textBoxes.some(t => t.id === selectedId);
+  if (!canvasRef.current || !selectedId) return;
+
+  const rect = canvasRef.current.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // ✅ RESIZE LOGIC
+  // if (isResizing) {
+  //   const el = getElemById(selectedId);
+  //   if (!el) return;
+
+  //   const newWidth = Math.max(50, x - el.x);
+  //   const newHeight = Math.max(50, y - el.y);
+
+  //   const isImage = slide.images.some(i => i.id === selectedId);
+  //   const isShape = slide.shapes.some(s => s.id === selectedId);
+  //   const isText = slide.textBoxes.some(t => t.id === selectedId);
+
+  //   if (isImage) updateImage(selectedId, { width: newWidth, height: newHeight });
+  //   else if (isShape) updateShape(selectedId, { width: newWidth, height: newHeight });
+  //   else if (isText) updateTextBox(selectedId, { width: newWidth, height: newHeight });
+
+  //   return;
+  // }
+  if (isResizing) {
+  const el = getElemById(selectedId);
+  if (!el) return;
+
+  let newWidth = el.width;
+  let newHeight = el.height;
+  let newX = el.x;
+  let newY = el.y;
+
+  if (resizeDir === "se") {
+    newWidth = x - el.x;
+    newHeight = y - el.y;
+  }
+
+  if (resizeDir === "sw") {
+    newWidth = el.width + (el.x - x);
+    newHeight = y - el.y;
+    newX = x;
+  }
+
+  if (resizeDir === "ne") {
+    newWidth = x - el.x;
+    newHeight = el.height + (el.y - y);
+    newY = y;
+  }
+
+  if (resizeDir === "nw") {
+    newWidth = el.width + (el.x - x);
+    newHeight = el.height + (el.y - y);
+    newX = x;
+    newY = y;
+  }
+
+  newWidth = Math.max(50, newWidth);
+  newHeight = Math.max(50, newHeight);
+
+  updateImage(selectedId, {
+    width: newWidth,
+    height: newHeight,
+    x: newX,
+    y: newY
+  });
+
+  return;
+}
+
+  // ✅ DRAG LOGIC
+  if (isDragging) {
+    const newX = Math.max(0, x - dragOffset.x);
+    const newY = Math.max(0, y - dragOffset.y);
+
+    const isImage = slide.images.some(i => i.id === selectedId);
     const isShape = slide.shapes.some(s => s.id === selectedId);
-    if (isText) updateTextBox(selectedId, { x, y });
-    else if (isShape) updateShape(selectedId, { x, y });
-    else updateImage(selectedId, { x, y });
-  }, [isDragging, selectedId, dragOffset, slide]);
+    const isText = slide.textBoxes.some(t => t.id === selectedId);
+
+    if (isImage) updateImage(selectedId, { x: newX, y: newY });
+    else if (isShape) updateShape(selectedId, { x: newX, y: newY });
+    else if (isText) updateTextBox(selectedId, { x: newX, y: newY });
+  }
+
+}, [isDragging, isResizing, selectedId, dragOffset, slide]);
 
   const handleMouseUp = () => { setIsDragging(false); setIsResizing(false); };
 
@@ -392,14 +705,42 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
   };
 
   // ── Download JSON ──
-  const downloadJSON = () => {
-    const blob = new Blob([JSON.stringify(slides, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `presentation-${Date.now()}.json`; a.click();
-    URL.revokeObjectURL(url);
+  const downloadPresentation = async () => {
+  const pdf = new jsPDF("landscape", "px", [800, 500]);
+
+  for (let i = 0; i < slides.length; i++) {
+    const canvas = await drawSlideToCanvas(slides[i]);
+    const imgData = canvas.toDataURL("image/png");
+
+    if (i > 0) pdf.addPage();
+
+    pdf.addImage(imgData, "PNG", 0, 0, 800, 500);
+  }
+
+  pdf.save("presentation.pdf");
+};
+
+  const handleImageUpload = (file: File) => {
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    const im: ImageItem = {
+      id: Date.now().toString(),
+      src: e.target?.result as string, // base64
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 200,
+      opacity: 100,
+      zIndex: 1,
+    };
+
+    updateSlide(s => ({ ...s, images: [...s.images, im] }));
+    setSelectedId(im.id);
   };
 
+  reader.readAsDataURL(file); // convert to base64
+};
   const ToolBtn = ({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active?: boolean; onClick: () => void }) => (
     <button onClick={onClick} title={label}
       className={`w-8 h-8 flex items-center justify-center rounded-lg transition text-xs font-medium
@@ -517,7 +858,7 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
             <button onClick={()=>saveToDb(slides)} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition" title="Save">
               <Save size={14}/>
             </button>
-            <button onClick={downloadJSON} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition" title="Download JSON">
+            <button onClick={downloadPresentation} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition" title="Download JSON">
               <Download size={14}/>
             </button>
             <button onClick={addSlide} className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg transition">
@@ -568,6 +909,12 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
           <div className="flex-1 overflow-auto flex items-center justify-center p-6">
             <div
               ref={canvasRef}
+              onDoubleClick={(e) => {
+  if (e.target === canvasRef.current) {
+    setSelectedId(null);     // ✅ unselect
+    setEditingId(null);      // ✅ stop text editing
+  }
+}}
               className="relative shadow-2xl overflow-hidden select-none"
               style={{
                 width: "800px",
@@ -632,10 +979,45 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
                   className={selectedId===im.id?"ring-2 ring-indigo-400":""}
                 >
                   <img src={im.src} alt="" className="w-full h-full object-cover pointer-events-none" />
-                  {selectedId===im.id&&(
-                    <div onMouseDown={e=>{e.stopPropagation();setIsResizing(true);}}
-                      className="absolute bottom-0 right-0 w-3 h-3 bg-indigo-500 border border-white rounded-sm cursor-se-resize"/>
-                  )}
+                  {selectedId === im.id && (
+  <>
+    {/* bottom-right */}
+    <div onMouseDown={e=>{
+      e.stopPropagation();
+      setSelectedId(im.id);
+      setIsResizing(true);
+      setResizeDir("se");
+    }}
+    className="absolute bottom-0 right-0 w-3 h-3 bg-indigo-500 cursor-se-resize"/>
+
+    {/* bottom-left */}
+    <div onMouseDown={e=>{
+      e.stopPropagation();
+      setSelectedId(im.id);
+      setIsResizing(true);
+      setResizeDir("sw");
+    }}
+    className="absolute bottom-0 left-0 w-3 h-3 bg-indigo-500 cursor-sw-resize"/>
+
+    {/* top-right */}
+    <div onMouseDown={e=>{
+      e.stopPropagation();
+      setSelectedId(im.id);
+      setIsResizing(true);
+      setResizeDir("ne");
+    }}
+    className="absolute top-0 right-0 w-3 h-3 bg-indigo-500 cursor-ne-resize"/>
+
+    {/* top-left */}
+    <div onMouseDown={e=>{
+      e.stopPropagation();
+      setSelectedId(im.id);
+      setIsResizing(true);
+      setResizeDir("nw");
+    }}
+    className="absolute top-0 left-0 w-3 h-3 bg-indigo-500 cursor-nw-resize"/>
+  </>
+)}
                 </div>
               ))}
 
@@ -842,10 +1224,15 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
             {/* Add image */}
             <div>
               <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2">Insert Image</p>
-              <input type="text" placeholder="Image URL..."
-                className="w-full h-6 text-[9px] bg-gray-700 border border-gray-600 text-white rounded px-2 focus:outline-none mb-1"
-                onKeyDown={e=>{ if(e.key==="Enter") { addImageFromUrl((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value=""; }}}
-              />
+              <input
+  type="file"
+  accept="image/*"
+  className="w-full text-[9px] text-gray-400 mt-2"
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageUpload(file);
+  }}
+/>
               <p className="text-[9px] text-gray-500">Press Enter to add</p>
             </div>
 

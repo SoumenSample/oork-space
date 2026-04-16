@@ -731,7 +731,7 @@ export default function Sidebar({ view, setView }: SidebarProps) {
                                 openCreateModal(item.key);
                               }}
                               className={`p-1 rounded-md ${hoverClass}`} title="Add">
-                              {item.key!=="dashboard" && item.key!=="whiteboard" && item.key!=="video-editing" && item.key!=="presentation" && item.key!=="social-media" && item.key!=="website-builder" && <Plus size={16}/>}
+                              {item.key!=="dashboard" && item.key!=="whiteboard" && item.key!=="video-editing" && item.key!=="presentation" && item.key!=="social-media" && item.key!=="website-builder" && item.key!=="schedule" && item.key!=="template" && item.key!=="activities" && item.key!=="market-places" && <Plus size={16}/>}
                             </button>
                             {item.key==="project-board" && (
                               <button onClick={() => setProjectBoardOpen((v)=>!v)} className={`p-1 rounded-md hover:border ${isDark?" hover:border-white":" hover:border-gray-500"} ${projectBoardOpen?"bg-transparent":"bg-transparent"}`} title={projectBoardOpen?"Collapse":"Expand"}>

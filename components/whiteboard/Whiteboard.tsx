@@ -6,6 +6,24 @@ type Tool = "pen" | "select" | "eraser" | "rectangle" | "circle" | "triangle" | 
 
 interface CanvasSnapshot { json: any; timestamp: number; }
 
+const MIN_CANVAS_HEIGHT = 1060;
+const CANVAS_EXPAND_STEP = 600;
+const CANVAS_EXPAND_PADDING = 180;
+
+const getDotColorForBackground = (color: string) => {
+  const hex = color.replace("#", "");
+  const normalized = hex.length === 3
+    ? hex.split("").map((ch) => ch + ch).join("")
+    : hex;
+
+  const r = parseInt(normalized.slice(0, 2), 16) || 0;
+  const g = parseInt(normalized.slice(2, 4), 16) || 0;
+  const b = parseInt(normalized.slice(4, 6), 16) || 0;
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+  return luminance > 0.6 ? "rgba(0,0,0,0.20)" : "rgba(255,255,255,0.35)";
+};
+
 export function Whiteboard({
   roomId, initialData, onChange, databaseId,
 }: {
@@ -48,6 +66,14 @@ export function Whiteboard({
     () => roomId ?? `whiteboard-${Math.random().toString(36).substr(2, 9)}`
   );
 
+  const boardDotColor = getDotColorForBackground(boardColor);
+  const boardPatternStyle = {
+    minHeight: 0,
+    backgroundColor: boardColor,
+    backgroundImage: `radial-gradient(${boardDotColor} 1.1px, transparent 1.1px)`,
+    backgroundSize: "24px 24px",
+  } as const;
+
   const normalizeShapeSelectionStyle = useCallback((canvas: any) => {
     canvas.getObjects().forEach((obj: any) => {
       const isText = obj?.type === "i-text" || obj?.type === "textbox";
@@ -69,7 +95,7 @@ export function Whiteboard({
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    canvas.setBackgroundColor(boardColor, () => canvas.renderAll());
+    canvas.setBackgroundColor("rgba(0,0,0,0)", () => canvas.renderAll());
   }, [boardColor]);
 
   // ✅ Save to DB
@@ -100,6 +126,19 @@ export function Whiteboard({
     saveTimerRef.current = setTimeout(() => saveToDatabase(json), 2000);
   }, [saveToDatabase]);
 
+  const ensureCanvasHeight = useCallback((y: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const neededHeight = y + CANVAS_EXPAND_PADDING;
+    const currentHeight = canvas.getHeight();
+    if (neededHeight <= currentHeight) return;
+
+    const nextHeight = Math.max(currentHeight + CANVAS_EXPAND_STEP, neededHeight);
+    canvas.setHeight(nextHeight);
+    canvas.renderAll();
+  }, []);
+
   // ✅ Init Fabric + Load from DB
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -116,9 +155,9 @@ export function Whiteboard({
       const parent = canvasRef.current?.parentElement;
       const canvas = new fabric.Canvas(canvasRef.current, {
         isDrawingMode: true,
-        backgroundColor: "#ffffff",
+        backgroundColor: "rgba(0,0,0,0)",
         width: parent?.offsetWidth || 900,
-        height: parent?.offsetHeight || 560,
+        height: Math.max(parent?.offsetHeight || MIN_CANVAS_HEIGHT, MIN_CANVAS_HEIGHT),
         preserveObjectStacking: true,
         renderOnAddRemove: false,
       });
@@ -136,7 +175,7 @@ export function Whiteboard({
         const p = canvasRef.current?.parentElement;
         if (!p) return;
         canvas.setWidth(p.offsetWidth);
-        canvas.setHeight(p.offsetHeight);
+        canvas.setHeight(Math.max(canvas.getHeight(), p.offsetHeight, MIN_CANVAS_HEIGHT));
         canvas.renderAll();
       };
       window.addEventListener("resize", handleResize);
@@ -151,23 +190,29 @@ export function Whiteboard({
               suppressUndoRef.current = true;
               canvas.loadFromJSON(data.canvas, () => {
                 normalizeShapeSelectionStyle(canvas);
-                canvas.renderAll();
-                suppressUndoRef.current = false;
+                canvas.setBackgroundColor("rgba(0,0,0,0)", () => {
+                  canvas.renderAll();
+                  suppressUndoRef.current = false;
+                });
               });
             } else if (initialData) {
               suppressUndoRef.current = true;
               canvas.loadFromJSON(initialData, () => {
                 normalizeShapeSelectionStyle(canvas);
-                canvas.renderAll();
-                suppressUndoRef.current = false;
+                canvas.setBackgroundColor("rgba(0,0,0,0)", () => {
+                  canvas.renderAll();
+                  suppressUndoRef.current = false;
+                });
               });
             }
           } else if (initialData) {
             suppressUndoRef.current = true;
             canvas.loadFromJSON(initialData, () => {
               normalizeShapeSelectionStyle(canvas);
-              canvas.renderAll();
-              suppressUndoRef.current = false;
+              canvas.setBackgroundColor("rgba(0,0,0,0)", () => {
+                canvas.renderAll();
+                suppressUndoRef.current = false;
+              });
             });
           }
         } catch (e) { console.error("Load failed:", e); }
@@ -205,16 +250,46 @@ export function Whiteboard({
       const brush = new fabric.PencilBrush(canvas);
       brush.color = activeColor; brush.width = brushSize;
       canvas.freeDrawingBrush = brush;
+
+      const onMouseMove = (opt: any) => {
+        const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
+      };
+      canvas.on("mouse:move", onMouseMove);
+
+      return () => {
+        canvas.off("mouse:move", onMouseMove);
+      };
     } else if (activeTool === "highlighter") {
       canvas.isDrawingMode = true; canvas.selection = true;
       const brush = new fabric.PencilBrush(canvas);
       brush.color = activeColor + "55"; brush.width = brushSize * 6;
       canvas.freeDrawingBrush = brush;
+
+      const onMouseMove = (opt: any) => {
+        const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
+      };
+      canvas.on("mouse:move", onMouseMove);
+
+      return () => {
+        canvas.off("mouse:move", onMouseMove);
+      };
     } else if (activeTool === "spray") {
       canvas.isDrawingMode = true; canvas.selection = true;
       const brush = new (fabric.SprayBrush || fabric.PencilBrush)(canvas);
       brush.color = activeColor; brush.width = brushSize * 3;
       canvas.freeDrawingBrush = brush;
+
+      const onMouseMove = (opt: any) => {
+        const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
+      };
+      canvas.on("mouse:move", onMouseMove);
+
+      return () => {
+        canvas.off("mouse:move", onMouseMove);
+      };
     } else if (activeTool === "eraser") {
       canvas.selection = false;
 
@@ -289,11 +364,15 @@ export function Whiteboard({
       const onMouseDown = (opt: any) => {
         isErasing = true;
         suppressUndoRef.current = true;
+        const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
         eraseAtPointer(opt);
       };
 
       const onMouseMove = (opt: any) => {
         if (!isErasing) return;
+        const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
         eraseAtPointer(opt);
       };
 
@@ -322,8 +401,10 @@ export function Whiteboard({
       canvas.isDrawingMode = false; canvas.selection = false; canvas.defaultCursor = "crosshair";
 
       const handleMouseDown = (opt: any) => {
+        
         suppressUndoRef.current = true;
         const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
         startPointRef.current = { x: pointer.x, y: pointer.y };
         isDrawingRef.current = true;
         const fill = fillColor === "transparent" ? "rgba(0,0,0,0)" : fillColor;
@@ -332,22 +413,94 @@ export function Whiteboard({
         if (activeTool === "rectangle") shape = new fabric.Rect({ left:pointer.x, top:pointer.y, width:0, height:0, fill, stroke:activeColor, strokeWidth:brushSize, opacity:opacity/100, selectable:false, evented:false });
         else if (activeTool === "circle") shape = new fabric.Ellipse({ left:pointer.x, top:pointer.y, rx:0, ry:0, fill, stroke:activeColor, strokeWidth:brushSize, opacity:opacity/100, selectable:false, evented:false });
         else if (activeTool === "triangle") shape = new fabric.Triangle({ left:pointer.x, top:pointer.y, width:0, height:0, fill, stroke:activeColor, strokeWidth:brushSize, opacity:opacity/100, selectable:false, evented:false });
-        else if (activeTool === "line" || activeTool === "arrow") shape = new fabric.Line([pointer.x,pointer.y,pointer.x,pointer.y], { stroke:activeColor, strokeWidth:brushSize, opacity:opacity/100, selectable:false, evented:false });
+        else if (activeTool === "line" ) shape = new fabric.Line([pointer.x,pointer.y,pointer.x,pointer.y], { stroke:activeColor, strokeWidth:brushSize, opacity:opacity/100, selectable:false, evented:false });
+  //  let shape: any = null;
 
-        if (shape) { canvas.add(shape); canvas.renderAll(); drawingShapeRef.current = shape; }
+if (activeTool === "arrow") {
+  const line = new fabric.Line(
+    [pointer.x, pointer.y, pointer.x, pointer.y],
+    {
+      stroke: activeColor,
+      strokeWidth: brushSize,
+      selectable: false,
+      evented: false,
+    }
+  );
+
+  const arrowHead = new fabric.Triangle({
+    width: 16,
+    height: 20,
+    fill: activeColor,
+    originX: "center",
+    originY: "center",
+    selectable: false,
+    evented: false,
+  });
+
+  line.arrowHead = arrowHead;
+
+  canvas.add(line);
+  canvas.add(arrowHead);
+
+  shape = line; // ✅ IMPORTANT
+}
+
+else if (activeTool === "line") {
+  shape = new fabric.Line(
+    [pointer.x, pointer.y, pointer.x, pointer.y],
+    {
+      stroke: activeColor,
+      strokeWidth: brushSize,
+      selectable: false,
+      evented: false,
+    }
+  );
+
+  canvas.add(shape);
+}
+
+if (shape && activeTool !== "arrow" && activeTool !== "line") {
+  canvas.add(shape);
+}
+
+if (shape) {
+  drawingShapeRef.current = shape;
+  canvas.renderAll();
+}
       };
 
       const handleMouseMove = (opt: any) => {
         if (!isDrawingRef.current || !startPointRef.current || !drawingShapeRef.current) return;
         const pointer = canvas.getPointer(opt.e);
+        ensureCanvasHeight(pointer.y);
         const sp = startPointRef.current;
         const shape = drawingShapeRef.current;
 
         if (activeTool === "rectangle" || activeTool === "triangle") shape.set({ left:Math.min(pointer.x,sp.x), top:Math.min(pointer.y,sp.y), width:Math.abs(pointer.x-sp.x)||1, height:Math.abs(pointer.y-sp.y)||1 });
         else if (activeTool === "circle") shape.set({ left:Math.min(pointer.x,sp.x), top:Math.min(pointer.y,sp.y), rx:Math.abs(pointer.x-sp.x)/2||1, ry:Math.abs(pointer.y-sp.y)/2||1 });
-        else if (activeTool === "line" || activeTool === "arrow") shape.set({ x2:pointer.x, y2:pointer.y });
+        else if (activeTool === "line") shape.set({ x2:pointer.x, y2:pointer.y });
+        else if (activeTool === "arrow") {
+  shape.set({ x2: pointer.x, y2: pointer.y });
+
+  const angle = Math.atan2(
+    pointer.y - sp.y,
+    pointer.x - sp.x
+  );
+
+ if (shape.arrowHead) {
+  shape.arrowHead.set({
+    left: pointer.x,
+    top: pointer.y,
+    angle: angle * (180 / Math.PI) + 90,
+  });
+
+  shape.arrowHead.setCoords();
+
+  canvas.bringToFront(shape.arrowHead); // ✅ IMPORTANT FIX
+}
+}
         shape.setCoords();
-        canvas.requestRenderAll();
+        canvas.renderAll(); // ✅ FIX
       };
 
       const handleMouseUp = (opt: any) => {
@@ -360,6 +513,15 @@ export function Whiteboard({
           suppressUndoRef.current = false;
           return;
         }
+        if (activeTool === "arrow" && shape.arrowHead) {
+  const group = new fabric.Group([shape, shape.arrowHead], {
+    selectable: true,
+  });
+
+  canvas.remove(shape);
+  canvas.remove(shape.arrowHead);
+  canvas.add(group);
+}
 
         const pointer = opt?.e ? canvas.getPointer(opt.e) : null;
         const drawDistance = sp && pointer
@@ -392,7 +554,7 @@ export function Whiteboard({
         canvas.selection = true; canvas.defaultCursor = "default";
       };
     }
-  }, [activeTool, activeColor, fillColor, boardColor, brushSize, opacity, pushUndo]);
+  }, [activeTool, activeColor, fillColor, boardColor, brushSize, opacity, pushUndo, ensureCanvasHeight]);
 
   const addText = async (sticky = false) => {
     const fabric = fabricLibRef.current;
@@ -425,7 +587,12 @@ export function Whiteboard({
     setRedoStack(r=>[...r,{json:current,timestamp:Date.now()}]);
     setUndoStack(u=>u.slice(0,-1));
     suppressUndoRef.current = true;
-    canvas.loadFromJSON(prev.json, ()=>{ canvas.renderAll(); suppressUndoRef.current=false; });
+    canvas.loadFromJSON(prev.json, ()=>{
+      canvas.setBackgroundColor("rgba(0,0,0,0)", ()=>{
+        canvas.renderAll();
+        suppressUndoRef.current=false;
+      });
+    });
   }, [undoStack]);
 
   const handleRedo = useCallback(() => {
@@ -436,7 +603,12 @@ export function Whiteboard({
     setUndoStack(u=>[...u,{json:current,timestamp:Date.now()}]);
     setRedoStack(r=>r.slice(0,-1));
     suppressUndoRef.current = true;
-    canvas.loadFromJSON(next.json, ()=>{ canvas.renderAll(); suppressUndoRef.current=false; });
+    canvas.loadFromJSON(next.json, ()=>{
+      canvas.setBackgroundColor("rgba(0,0,0,0)", ()=>{
+        canvas.renderAll();
+        suppressUndoRef.current=false;
+      });
+    });
   }, [redoStack]);
 
   const deleteSelected = () => {
@@ -467,7 +639,7 @@ export function Whiteboard({
     if (!canvas) return;
     suppressUndoRef.current = true;
     canvas.clear();
-    canvas.setBackgroundColor(boardColor, ()=>{ canvas.renderAll(); suppressUndoRef.current=false; pushUndo(); });
+    canvas.setBackgroundColor("rgba(0,0,0,0)", ()=>{ canvas.renderAll(); suppressUndoRef.current=false; pushUndo(); });
   };
 
   const handleExportPNG = () => {
@@ -546,9 +718,9 @@ export function Whiteboard({
               : savedAt ? <span className="text-[9px] text-green-600">✓</span>
               : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>}
           />
-          <ToolBtn title="Export PNG" onClick={handleExportPNG}
+          {/* <ToolBtn title="Export PNG" onClick={handleExportPNG}
             icon={<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>}
-          />
+          /> */}
           <ToolBtn title="Export SVG" onClick={handleExportSVG} icon={<span className="text-[8px] font-bold">SVG</span>}/>
         </div>
         <div className="flex items-center gap-0.5 px-2 border-r border-gray-200">
@@ -671,7 +843,7 @@ export function Whiteboard({
       </div>
 
       {/* CANVAS */}
-      <div className="flex-1 overflow-hidden relative" style={{minHeight:0}}>
+      <div className="flex-1 overflow-auto relative" style={boardPatternStyle}>
         {!isReady && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white gap-2 z-10">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>

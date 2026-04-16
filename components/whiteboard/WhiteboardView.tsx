@@ -410,88 +410,81 @@ const applyDotBackground = (canvas: any) => {
             fill, stroke: activeColor, strokeWidth: brushSize,
             opacity: opacity / 100, selectable: false, evented: false,
           });
-        } else if (activeTool === "line") {
+        } else if (
+          activeTool === "line" ||
+          activeTool === "arrow" ||
+          activeTool === "double-arrow" ||
+          activeTool === "dashed-arrow"
+        ) {
           shape = new fabric.Line(
             [pointer.x, pointer.y, pointer.x, pointer.y],
-            { stroke: activeColor, strokeWidth: brushSize, opacity: opacity / 100, selectable: false, evented: false }
+            {
+              stroke: activeColor,
+              strokeWidth: brushSize,
+              opacity: opacity / 100,
+              selectable: false,
+              evented: false,
+              ...(activeTool === "dashed-arrow" ? { strokeDashArray: [10, 8] } : {}),
+            }
           );
         }
-        else if (
-  // activeTool === "line" ||
-  activeTool === "arrow" ||
-  activeTool === "double-arrow" ||
-  activeTool === "dashed-arrow"
-) {
-  shape = new fabric.Line(
-    [pointer.x, pointer.y, pointer.x, pointer.y],
-    {
-      stroke: activeColor,
-      strokeWidth: brushSize,
-      opacity: opacity / 100,
-      selectable: false,
-      evented: false,
-      strokeDashArray: activeTool === "dashed-arrow" ? [6, 4] : undefined,
-    }
-  );
-}
 
         if (shape) {
+          if (
+            activeTool === "arrow" ||
+            activeTool === "double-arrow" ||
+            activeTool === "dashed-arrow"
+          ) {
+            const lineStrokeWidth = Number(shape.strokeWidth ?? brushSize);
+            const arrowHeadWidth = Math.max(12, lineStrokeWidth * 4);
+            const arrowHeadHeight = Math.max(16, lineStrokeWidth * 5);
 
-  // ✅ ADD ARROWHEAD LOGIC HERE
-  if (
-    activeTool === "arrow" ||
-    activeTool === "double-arrow" ||
-    activeTool === "dashed-arrow"
-  ) {
-    const lineStrokeWidth = Number(shape.strokeWidth ?? brushSize);
-    const arrowHeadWidth = Math.max(12, lineStrokeWidth * 4);
-    const arrowHeadHeight = Math.max(16, lineStrokeWidth * 5);
+            const arrowHead = new fabric.Triangle({
+              width: arrowHeadWidth,
+              height: arrowHeadHeight,
+              fill: activeColor,
+              opacity: opacity / 100,
+              left: pointer.x,
+              top: pointer.y,
+              originX: "center",
+              originY: "center",
+              selectable: false,
+              evented: false,
+            });
 
-    const arrowHead = new fabric.Triangle({
-      width: arrowHeadWidth,
-      height: arrowHeadHeight,
-      fill: activeColor,
-      opacity: opacity / 100,
-      left: pointer.x,
-      top: pointer.y,
-      originX: "center",
-      originY: "center",
-      selectable: false,
-      evented: false,
-    });
+            shape.arrowHead = arrowHead;
+            setArrowHeadFromTip(arrowHead, pointer.x, pointer.y, 0, arrowHeadWidth, arrowHeadHeight);
 
-    shape.arrowHead = arrowHead;
-    setArrowHeadFromTip(arrowHead, pointer.x, pointer.y, 0, arrowHeadWidth, arrowHeadHeight);
+            if (activeTool === "double-arrow") {
+              const startHead = new fabric.Triangle({
+                width: arrowHeadWidth,
+                height: arrowHeadHeight,
+                fill: activeColor,
+                opacity: opacity / 100,
+                left: pointer.x,
+                top: pointer.y,
+                angle: 180,
+                originX: "center",
+                originY: "center",
+                selectable: false,
+                evented: false,
+              });
 
-    // ✅ Double arrow start head
-    if (activeTool === "double-arrow") {
-      const startHead = new fabric.Triangle({
-        width: arrowHeadWidth,
-        height: arrowHeadHeight,
-        fill: activeColor,
-        opacity: opacity / 100,
-        left: pointer.x,
-        top: pointer.y,
-        angle: 180,
-        originX: "center",
-        originY: "center",
-        selectable: false,
-        evented: false,
-      });
+              shape.startHead = startHead;
+              setArrowHeadFromTip(startHead, pointer.x, pointer.y, Math.PI, arrowHeadWidth, arrowHeadHeight);
+            }
+          }
 
-      shape.startHead = startHead;
-      setArrowHeadFromTip(startHead, pointer.x, pointer.y, Math.PI, arrowHeadWidth, arrowHeadHeight);
-      canvas.add(startHead);
-    }
-
-    canvas.add(arrowHead);
-  }
-
-  // ✅ ORIGINAL CODE
-  canvas.add(shape);
-  canvas.renderAll();
-  drawingShapeRef.current = shape;
-}
+          canvas.add(shape);
+          if (shape.startHead) {
+            canvas.add(shape.startHead);
+          }
+          if (shape.arrowHead) {
+            canvas.add(shape.arrowHead);
+          }
+          canvas.renderAll();
+          drawingShapeRef.current = shape;
+        }
       };
 
       const onMouseMove = (opt: any) => {
@@ -529,11 +522,13 @@ const applyDotBackground = (canvas: any) => {
   // ✅ End arrow head
   if (shape.arrowHead) {
     setArrowHeadFromTip(shape.arrowHead, pointer.x, pointer.y, angleRad, arrowHeadWidth, arrowHeadHeight);
+    shape.arrowHead.bringToFront?.();
   }
 
   // ✅ Start arrow head (for double arrow)
   if (shape.startHead) {
     setArrowHeadFromTip(shape.startHead, sp.x, sp.y, angleRad + Math.PI, arrowHeadWidth, arrowHeadHeight);
+    shape.startHead.bringToFront?.();
   }
 }
         
