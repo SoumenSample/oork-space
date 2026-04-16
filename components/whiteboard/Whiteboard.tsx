@@ -74,6 +74,25 @@ export function Whiteboard({
     backgroundSize: "24px 24px",
   } as const;
 
+  const applyObjectInteractivity = useCallback((canvas: any, interactive: boolean) => {
+    canvas.getObjects().forEach((obj: any) => {
+      const isText = obj?.type === "i-text" || obj?.type === "textbox";
+      obj.set({
+        selectable: interactive,
+        evented: interactive,
+        hasControls: interactive && isText,
+        hasBorders: interactive && isText,
+        hoverCursor: interactive ? "move" : "default",
+      });
+    });
+
+    if (!interactive) {
+      canvas.discardActiveObject();
+    }
+
+    canvas.requestRenderAll();
+  }, []);
+
   const normalizeShapeSelectionStyle = useCallback((canvas: any) => {
     canvas.getObjects().forEach((obj: any) => {
       const isText = obj?.type === "i-text" || obj?.type === "textbox";
@@ -190,6 +209,7 @@ export function Whiteboard({
               suppressUndoRef.current = true;
               canvas.loadFromJSON(data.canvas, () => {
                 normalizeShapeSelectionStyle(canvas);
+                applyObjectInteractivity(canvas, activeTool === "select");
                 canvas.setBackgroundColor("rgba(0,0,0,0)", () => {
                   canvas.renderAll();
                   suppressUndoRef.current = false;
@@ -199,6 +219,7 @@ export function Whiteboard({
               suppressUndoRef.current = true;
               canvas.loadFromJSON(initialData, () => {
                 normalizeShapeSelectionStyle(canvas);
+                applyObjectInteractivity(canvas, activeTool === "select");
                 canvas.setBackgroundColor("rgba(0,0,0,0)", () => {
                   canvas.renderAll();
                   suppressUndoRef.current = false;
@@ -209,6 +230,7 @@ export function Whiteboard({
             suppressUndoRef.current = true;
             canvas.loadFromJSON(initialData, () => {
               normalizeShapeSelectionStyle(canvas);
+              applyObjectInteractivity(canvas, activeTool === "select");
               canvas.setBackgroundColor("rgba(0,0,0,0)", () => {
                 canvas.renderAll();
                 suppressUndoRef.current = false;
@@ -232,7 +254,7 @@ export function Whiteboard({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       fabricRef.current?.dispose();
     };
-  }, [normalizeShapeSelectionStyle]);
+  }, [normalizeShapeSelectionStyle, applyObjectInteractivity]);
 
   // ── Tool sync ──
   useEffect(() => {
@@ -397,8 +419,10 @@ export function Whiteboard({
       };
     } else if (activeTool === "select") {
       canvas.isDrawingMode = false; canvas.selection = true;
+      applyObjectInteractivity(canvas, true);
     } else {
       canvas.isDrawingMode = false; canvas.selection = false; canvas.defaultCursor = "crosshair";
+      applyObjectInteractivity(canvas, false);
 
       const handleMouseDown = (opt: any) => {
         
@@ -515,7 +539,8 @@ if (shape) {
         }
         if (activeTool === "arrow" && shape.arrowHead) {
   const group = new fabric.Group([shape, shape.arrowHead], {
-    selectable: true,
+    selectable: false,
+    evented: false,
   });
 
   canvas.remove(shape);
@@ -531,7 +556,7 @@ if (shape) {
         if (drawDistance < 2) {
           canvas.remove(shape);
         } else {
-          shape.set({ selectable:true, evented:true, hasControls:false, hasBorders:false });
+          shape.set({ selectable:false, evented:false, hasControls:false, hasBorders:false });
           shape.setCoords();
         }
 
@@ -554,7 +579,7 @@ if (shape) {
         canvas.selection = true; canvas.defaultCursor = "default";
       };
     }
-  }, [activeTool, activeColor, fillColor, boardColor, brushSize, opacity, pushUndo, ensureCanvasHeight]);
+  }, [activeTool, activeColor, fillColor, boardColor, brushSize, opacity, pushUndo, ensureCanvasHeight, applyObjectInteractivity]);
 
   const addText = async (sticky = false) => {
     const fabric = fabricLibRef.current;
