@@ -39,7 +39,11 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-table": "^8.21.3",
+<<<<<<< HEAD
     "agora-rtc-sdk-ng": "^4.24.3",
+=======
+    "@xyflow/react": "^12.10.2",
+>>>>>>> c5d5176156c15859d1fcd67ba7f3e9fef6fba3f6
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.73.3",
     "class-variance-authority": "^0.7.1",
@@ -66,7 +70,6 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-icons": "^5.5.0",
-    "reactflow": "^11.11.4",
     "recharts": "^3.8.0",
     "reveal.js": "^4.5.0",
     "sanitize-html": "^2.17.2",

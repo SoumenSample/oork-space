@@ -522,6 +522,10 @@
   border-color: var(--nb-border);
 }
 
+#gjs-blocks .gjs-block[data-input-form-block="true"] {
+  display: none !important;
+}
+
 .wb-visual-block-label {
   display: inline-flex;
   align-items: center;

@@ -53,9 +53,27 @@ type WorkflowRunItem = {
   stepLogs?: WorkflowStepLog[];
 };
 type SavedSnippet = { id: string; name: string; html: string; savedAt: number };
+type FormFieldType =
+  | "text"
+  | "email"
+  | "password"
+  | "number"
+  | "tel"
+  | "url"
+  | "date"
+  | "textarea"
+  | "checkbox"
+  | "select"
+  | "search"
+  | "radio"
+  | "range"
+  | "datetime-local"
+  | "image"
+  | "file";
+
 type FormField = {
   id: string;
-  type: "text" | "email" | "password" | "number" | "tel" | "url" | "date" | "textarea" | "checkbox" | "select";
+  type: FormFieldType;
   name: string;
   label: string;
   placeholder: string;
@@ -65,6 +83,58 @@ type FormField = {
   min: string;
   max: string;
 };
+
+const FORM_FIELD_TYPES_WITH_OPTIONS = new Set<FormFieldType>(["select", "radio"]);
+const FORM_FIELD_TYPES_WITH_PLACEHOLDER = new Set<FormFieldType>([
+  "text",
+  "email",
+  "password",
+  "number",
+  "tel",
+  "url",
+  "search",
+  "textarea",
+]);
+const FORM_FIELD_TYPES_WITH_MIN_MAX = new Set<FormFieldType>(["number", "date", "datetime-local", "range"]);
+
+const INPUT_FORM_QUICK_BLOCKS = [
+  { id: "input-form-workflow-scope", label: "Workflow Scope" },
+  { id: "input-form-submit", label: "Submit Workflow" },
+  { id: "input-form-text", label: "Input" },
+  { id: "input-form-textarea", label: "Multiline Input" },
+  { id: "input-form-checkbox", label: "Checkbox" },
+  { id: "input-form-dropdown", label: "Dropdown" },
+  { id: "input-form-search", label: "Searchbox" },
+  { id: "input-form-radio", label: "Radio Buttons" },
+  { id: "input-form-slider", label: "Slider Input" },
+  { id: "input-form-datetime", label: "Date/Time Picker" },
+  { id: "input-form-image", label: "Picture Uploader" },
+  { id: "input-form-file", label: "File Uploader" },
+] as const;
+
+const INPUT_FORM_BLOCK_IDS: Set<string> = new Set(INPUT_FORM_QUICK_BLOCKS.map((item) => item.id));
+
+function normalizeBlockText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, " ");
+}
+
+function getBlockId(block: any): string {
+  return String(block?.getId?.() || block?.id || block?.get?.("id") || "");
+}
+
+function isInputFormBlockModel(block: any): boolean {
+  return INPUT_FORM_BLOCK_IDS.has(getBlockId(block));
+}
+
+function getBlockSearchText(block: any): string {
+  const labelRaw = String(block?.get?.("label") || "");
+  const categoryRaw = String(block?.getCategoryLabel?.() || block?.get?.("category") || "");
+  return normalizeBlockText(`${stripHtml(labelRaw)} ${stripHtml(categoryRaw)}`);
+}
 
 const DEFAULT_HTML = `
 <main class="wb-page">
@@ -598,48 +668,91 @@ export default function GrapesEditor({
     setStatus(`Inserted ${snippet.name}`);
   }, []);
 
-  const findNearestFormComponent = useCallback((component: any): any | null => {
+  const findNearestWorkflowBindableComponent = useCallback((component: any): any | null => {
     let current = component;
     while (current) {
       const tag = String(current?.get?.("tagName") || "").toLowerCase();
       if (tag === "form") return current;
+
+      const attrs = (current?.getAttributes?.() || {}) as Record<string, unknown>;
+      if (
+        Object.prototype.hasOwnProperty.call(attrs, "data-workflow-scope")
+        || Object.prototype.hasOwnProperty.call(attrs, "data-workflow-submit")
+      ) {
+        return current;
+      }
+
       current = current?.parent?.();
     }
     return null;
   }, []);
 
-  const syncWorkflowKeyFromSelectedForm = useCallback(() => {
+  const syncWorkflowKeyFromSelectedBinding = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) return;
 
     const selected = editor.getSelected?.();
-    const form = findNearestFormComponent(selected);
-    if (!form) return;
+    const bindable = findNearestWorkflowBindableComponent(selected);
+    if (!bindable) return;
 
-    const attrs = (form.getAttributes?.() || {}) as Record<string, unknown>;
+    const attrs = (bindable.getAttributes?.() || {}) as Record<string, unknown>;
     const key = String(attrs["data-workflow-key"] || "");
     setFormWorkflowKey(key);
-  }, [findNearestFormComponent]);
+  }, [findNearestWorkflowBindableComponent]);
 
-  const applyWorkflowKeyToSelectedForm = useCallback((workflowKey: string) => {
+  const applyWorkflowKeyToSelectedBinding = useCallback((workflowKey: string) => {
     const editor = editorRef.current;
     if (!editor) return false;
 
     const selected = editor.getSelected?.();
-    const form = findNearestFormComponent(selected);
-    if (!form) return false;
+    const bindable = findNearestWorkflowBindableComponent(selected);
+    if (!bindable) return false;
 
-    const attrs = (form.getAttributes?.() || {}) as Record<string, unknown>;
-    form.addAttributes({
+    const attrs = (bindable.getAttributes?.() || {}) as Record<string, unknown>;
+    bindable.addAttributes({
       ...attrs,
       "data-workflow-key": workflowKey,
       "data-app-id": appId || String(attrs["data-app-id"] || ""),
       "data-workflow-alert": String(attrs["data-workflow-alert"] || "true"),
     });
 
-    setStatus(workflowKey ? `Assigned workflow ${workflowKey} to selected form` : "Cleared selected form workflow");
+    const tag = String(bindable?.get?.("tagName") || "").toLowerCase();
+    const isTrigger = Object.prototype.hasOwnProperty.call(attrs, "data-workflow-submit");
+    const targetLabel = tag === "form" ? "form" : (isTrigger ? "workflow trigger" : "workflow scope");
+
+    setStatus(workflowKey ? `Assigned workflow ${workflowKey} to selected ${targetLabel}` : `Cleared selected ${targetLabel} workflow`);
     return true;
-  }, [appId, findNearestFormComponent]);
+  }, [appId, findNearestWorkflowBindableComponent]);
+
+  const renderBlockPanels = useCallback((searchQuery: string) => {
+    const editor = editorRef.current;
+    const visualContainer = document.getElementById("gjs-blocks");
+    const inputFormsContainer = document.getElementById("gjs-input-form-blocks");
+
+    if (!editor || !visualContainer || !inputFormsContainer) return;
+
+    const bm = editor.BlockManager;
+    const collection = bm?.getAll?.();
+    const allBlocks = Array.isArray(collection)
+      ? collection
+      : collection?.toArray?.() || collection?.models || [];
+
+    const visualBlocks = allBlocks.filter((block: any) => !isInputFormBlockModel(block));
+    const inputFormBlocks = allBlocks.filter((block: any) => isInputFormBlockModel(block));
+    const normalizedQuery = normalizeBlockText(searchQuery);
+
+    const filteredVisualBlocks = !normalizedQuery
+      ? visualBlocks
+      : visualBlocks.filter((block: any) => getBlockSearchText(block).includes(normalizedQuery));
+
+    bm.render(filteredVisualBlocks);
+
+    const inputBlocksEl = bm.render(inputFormBlocks, { external: true } as any);
+    inputFormsContainer.innerHTML = "";
+    if (inputBlocksEl) {
+      inputFormsContainer.appendChild(inputBlocksEl);
+    }
+  }, []);
 
   const linkSelectedElement = useCallback((slug: string) => {
     const editor = editorRef.current;
@@ -692,7 +805,7 @@ export default function GrapesEditor({
 
       if (createdKey) {
         setFormWorkflowKey(createdKey);
-        applyWorkflowKeyToSelectedForm(createdKey);
+        applyWorkflowKeyToSelectedBinding(createdKey);
       }
 
       if (createdId && createdKey) {
@@ -716,16 +829,16 @@ export default function GrapesEditor({
     } catch {
       setStatus("Failed to create workflow");
     }
-  }, [appId, applyWorkflowKeyToSelectedForm, pageName, runSave]);
+  }, [appId, applyWorkflowKeyToSelectedBinding, pageName, runSave]);
 
   const openSelectedWorkflowFromBuilder = useCallback(async () => {
     let activeKey = formWorkflowKey;
     const editor = editorRef.current;
     if (editor) {
       const selectedComponent = editor.getSelected?.();
-      const selectedForm = findNearestFormComponent(selectedComponent);
-      if (selectedForm) {
-        const attrs = (selectedForm.getAttributes?.() || {}) as Record<string, unknown>;
+      const selectedBindable = findNearestWorkflowBindableComponent(selectedComponent);
+      if (selectedBindable) {
+        const attrs = (selectedBindable.getAttributes?.() || {}) as Record<string, unknown>;
         activeKey = String(attrs["data-workflow-key"] || "");
       }
     }
@@ -739,7 +852,7 @@ export default function GrapesEditor({
     await runSave();
     setWorkflowDrawerId(selected._id);
     setShowWorkflowDrawer(true);
-  }, [findNearestFormComponent, formWorkflowKey, runSave, workflows]);
+  }, [findNearestWorkflowBindableComponent, formWorkflowKey, runSave, workflows]);
 
   const addFormField = useCallback(() => {
     setFormFields((prev) => [
@@ -769,15 +882,26 @@ export default function GrapesEditor({
         ? ` placeholder=\"${field.placeholder.trim()}\"`
         : "";
 
+      const optionValues = field.options
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
       if (field.type === "select") {
-        const options = field.options
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean);
-        const optionsHtml = (options.length ? options : ["Option 1", "Option 2"]).map((option) => (
+        const optionsHtml = (optionValues.length ? optionValues : ["Option 1", "Option 2"]).map((option) => (
           `<option value=\"${option}\">${option}</option>`
         )).join("");
         return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<select name=\"${field.name}\"${requiredAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;\">${optionsHtml}</select></label>`;
+      }
+
+      if (field.type === "radio") {
+        const options = optionValues.length ? optionValues : ["Option 1", "Option 2"];
+        const radioHtml = options.map((option, index) => {
+          const checkedAttr = field.checked && index === 0 ? " checked" : "";
+          const requiredForGroup = field.required && index === 0 ? " required" : "";
+          return `<label style=\"display:flex;align-items:center;gap:8px;font-weight:500;color:#1e293b;\"><input type=\"radio\" name=\"${field.name}\" value=\"${option}\"${requiredForGroup}${checkedAttr} style=\"width:16px;height:16px;\"/>${option}</label>`;
+        }).join("");
+        return `<fieldset style=\"display:flex;flex-direction:column;gap:8px;border:1px solid #cbd5e1;border-radius:10px;padding:10px;\"><legend style=\"padding:0 6px;font-weight:600;color:#1e293b;\">${label}</legend>${radioHtml}</fieldset>`;
       }
 
       if (field.type === "checkbox") {
@@ -787,6 +911,20 @@ export default function GrapesEditor({
 
       if (field.type === "textarea") {
         return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<textarea name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;min-height:96px;\"></textarea></label>`;
+      }
+
+      if (field.type === "image") {
+        return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<input type=\"file\" name=\"${field.name}\" accept=\"image/*\"${requiredAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;\" /></label>`;
+      }
+
+      if (field.type === "file") {
+        return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<input type=\"file\" name=\"${field.name}\"${requiredAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;\" /></label>`;
+      }
+
+      if (field.type === "range") {
+        const rangeMin = field.min.trim() || "0";
+        const rangeMax = field.max.trim() || "100";
+        return `<label style=\"display:flex;flex-direction:column;gap:8px;font-weight:600;color:#1e293b;\">${label}<input type=\"range\" name=\"${field.name}\" min=\"${rangeMin}\" max=\"${rangeMax}\"${requiredAttr} style=\"width:100%;\" /></label>`;
       }
 
       return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<input type=\"${field.type}\" name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;\" /></label>`;
@@ -1094,7 +1232,7 @@ export default function GrapesEditor({
         component.set("traits", ["alt", { type: "text", name: "src", label: "Image URL" }]);
       }
 
-      syncWorkflowKeyFromSelectedForm();
+      syncWorkflowKeyFromSelectedBinding();
     });
 
       editor.on("component:dblclick", (component: any) => {
@@ -1189,6 +1327,93 @@ export default function GrapesEditor({
       label: visualLabel("F", "Form"),
       content:
         `<form data-workflow-key="" data-app-id="${appId || ""}" data-workflow-alert="true" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
+    });
+
+    const inputFormsCategory = "Input forms";
+    const inputFormBlockAttributes = { "data-input-form-block": "true" };
+
+    editor.BlockManager.add("input-form-workflow-scope", {
+      label: visualLabel("WS", "Workflow Scope"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: `<section data-workflow-scope="true" data-workflow-key="" data-app-id="${appId || ""}" data-workflow-alert="true" style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;"><h4 style="margin:0;color:#0f172a;">Workflow Scope</h4><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Email<input type="email" name="email" data-field-key="email" placeholder="name@example.com" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><button type="button" data-workflow-submit="true" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Submit Workflow</button></section>`,
+    });
+
+    editor.BlockManager.add("input-form-submit", {
+      label: visualLabel("SB", "Submit Workflow"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<button type="button" data-workflow-submit="true" data-workflow-key="" data-app-id="" data-workflow-alert="true" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Submit Workflow</button>',
+    });
+
+    editor.BlockManager.add("input-form-text", {
+      label: visualLabel("I", "Input"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Input<input type="text" name="input" data-field-key="input" placeholder="Type here" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/></label>',
+    });
+
+    editor.BlockManager.add("input-form-textarea", {
+      label: visualLabel("M", "Multiline Input"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Multiline Input<textarea name="message" data-field-key="message" placeholder="Type message" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;min-height:96px;"></textarea></label>',
+    });
+
+    editor.BlockManager.add("input-form-checkbox", {
+      label: visualLabel("C", "Checkbox"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;align-items:center;gap:8px;font-weight:600;color:#1e293b;"><input type="checkbox" name="checkbox" data-field-key="checkbox" style="width:16px;height:16px;"/>Checkbox</label>',
+    });
+
+    editor.BlockManager.add("input-form-dropdown", {
+      label: visualLabel("D", "Dropdown"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Dropdown<select name="dropdown" data-field-key="dropdown" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"><option value="option-1">Option 1</option><option value="option-2">Option 2</option></select></label>',
+    });
+
+    editor.BlockManager.add("input-form-search", {
+      label: visualLabel("S", "Searchbox"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Searchbox<input type="search" name="search" data-field-key="search" placeholder="Search..." style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/></label>',
+    });
+
+    editor.BlockManager.add("input-form-radio", {
+      label: visualLabel("R", "Radio Buttons"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<fieldset style="display:flex;flex-direction:column;gap:8px;border:1px solid #cbd5e1;border-radius:10px;padding:10px;"><legend style="padding:0 6px;font-weight:600;color:#1e293b;">Radio Buttons</legend><label style="display:flex;align-items:center;gap:8px;color:#1e293b;"><input type="radio" name="radio" data-field-key="radio" value="option-1" checked/>Option 1</label><label style="display:flex;align-items:center;gap:8px;color:#1e293b;"><input type="radio" name="radio" data-field-key="radio" value="option-2"/>Option 2</label></fieldset>',
+    });
+
+    editor.BlockManager.add("input-form-slider", {
+      label: visualLabel("SL", "Slider Input"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:8px;font-weight:600;color:#1e293b;">Slider Input<input type="range" name="slider" data-field-key="slider" min="0" max="100" style="width:100%;"/></label>',
+    });
+
+    editor.BlockManager.add("input-form-datetime", {
+      label: visualLabel("DT", "Date/Time Picker"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Date/Time Picker<input type="datetime-local" name="date_time" data-field-key="date_time" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/></label>',
+    });
+
+    editor.BlockManager.add("input-form-image", {
+      label: visualLabel("PI", "Picture Uploader"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Picture Uploader<input type="file" name="picture" data-field-key="picture" accept="image/*" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label>',
+    });
+
+    editor.BlockManager.add("input-form-file", {
+      label: visualLabel("FL", "File Uploader"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">File Uploader<input type="file" name="file" data-field-key="file" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label>',
     });
 
     editor.BlockManager.add("visual-footer", {
@@ -1325,6 +1550,7 @@ export default function GrapesEditor({
       window.addEventListener("keydown", onKeyDown);
 
       editorRef.current = editor;
+      renderBlockPanels("");
 
       const flushLocalOnUnload = () => {
       persistLocalSnapshot();
@@ -1363,7 +1589,7 @@ export default function GrapesEditor({
       destroyEditor?.();
       editorRef.current = null;
     };
-  }, [appId, forceCanvasFill, initialCss, initialHtml, initialProjectData, localDraftKey, pageUpdatedAt, persistLocalSnapshot, runSave, syncUndoState]);
+  }, [appId, forceCanvasFill, initialCss, initialHtml, initialProjectData, localDraftKey, pageUpdatedAt, persistLocalSnapshot, renderBlockPanels, runSave, syncUndoState]);
 
   useEffect(() => {
     setSeo({ ...EMPTY_SEO, ...initialSeo });
@@ -1415,18 +1641,8 @@ export default function GrapesEditor({
   }, [loadSavedSnippets]);
 
   useEffect(() => {
-    const container = document.getElementById("gjs-blocks");
-    if (!container) return;
-
-    const query = elementSearch.trim().toLowerCase();
-    const blockNodes = Array.from(container.querySelectorAll(".gjs-block"));
-
-    blockNodes.forEach((node) => {
-      const el = node as HTMLElement;
-      const label = (el.textContent || "").toLowerCase();
-      el.style.display = !query || label.includes(query) ? "" : "none";
-    });
-  }, [elementSearch]);
+    renderBlockPanels(elementSearch);
+  }, [elementSearch, renderBlockPanels]);
 
   const undo = () => {
     editorRef.current?.UndoManager.undo();
@@ -1795,8 +2011,9 @@ export default function GrapesEditor({
             <p className="nocode-small-helper">Container blocks are available in Visual Elements.</p>
           </details>
 
-          <details className="nocode-left-accordion">
+          <details className="nocode-left-accordion" open>
             <summary>Input forms</summary>
+            <div id="gjs-input-form-blocks" className="nocode-pane-scroll nocode-left-pane-scroll" />
             <div className="nocode-left-inline-action">
               <button className="nocode-btn nocode-btn-secondary" onClick={() => setShowFormBuilder((v) => !v)}>
                 {showFormBuilder ? "Hide Form Builder" : "Open Form Builder"}
@@ -1874,9 +2091,9 @@ export default function GrapesEditor({
                 onChange={(e) => {
                   const nextKey = e.target.value;
                   setFormWorkflowKey(nextKey);
-                  const applied = applyWorkflowKeyToSelectedForm(nextKey);
+                  const applied = applyWorkflowKeyToSelectedBinding(nextKey);
                   if (!applied) {
-                    setStatus("Select a form to assign workflow");
+                    setStatus("Select a form, workflow scope, or submit trigger");
                   }
                 }}
               >
@@ -1906,9 +2123,9 @@ export default function GrapesEditor({
                       className={`nocode-workflow-item ${selected ? "active" : ""}`}
                       onClick={() => {
                         setFormWorkflowKey(wf.key);
-                        const applied = applyWorkflowKeyToSelectedForm(wf.key);
+                        const applied = applyWorkflowKeyToSelectedBinding(wf.key);
                         if (!applied) {
-                          setStatus("Select a form to assign workflow");
+                          setStatus("Select a form, workflow scope, or submit trigger");
                         }
                       }}
                       type="button"
@@ -1938,28 +2155,34 @@ export default function GrapesEditor({
                     <input value={field.label} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, label: e.target.value } : item))} placeholder="Label" />
                     <input value={field.name} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, name: e.target.value } : item))} placeholder="Name" />
                     <select value={field.type} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, type: e.target.value as FormField["type"] } : item))}>
-                      <option value="text">Text</option>
+                      <option value="text">Input</option>
+                      <option value="textarea">Multiline Input</option>
+                      <option value="checkbox">Checkbox</option>
+                      <option value="select">Dropdown</option>
+                      <option value="search">Searchbox</option>
+                      <option value="radio">Radio Buttons</option>
+                      <option value="range">Slider Input</option>
+                      <option value="datetime-local">Date/Time Picker</option>
+                      <option value="image">Picture Uploader</option>
+                      <option value="file">File Uploader</option>
                       <option value="email">Email</option>
                       <option value="password">Password</option>
                       <option value="number">Number</option>
                       <option value="tel">Phone</option>
                       <option value="url">URL</option>
                       <option value="date">Date</option>
-                      <option value="textarea">Textarea</option>
-                      <option value="checkbox">Checkbox</option>
-                      <option value="select">Dropdown</option>
                     </select>
-                    {field.type !== "checkbox" && field.type !== "select" ? (
+                    {FORM_FIELD_TYPES_WITH_PLACEHOLDER.has(field.type) ? (
                       <input value={field.placeholder} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, placeholder: e.target.value } : item))} placeholder="Placeholder" />
                     ) : null}
-                    {field.type === "select" ? (
+                    {FORM_FIELD_TYPES_WITH_OPTIONS.has(field.type) ? (
                       <input
                         value={field.options}
                         onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, options: e.target.value } : item))}
                         placeholder="Options (comma separated)"
                       />
                     ) : null}
-                    {field.type !== "checkbox" && field.type !== "select" && field.type !== "email" && field.type !== "password" && field.type !== "tel" && field.type !== "url" ? (
+                    {FORM_FIELD_TYPES_WITH_MIN_MAX.has(field.type) ? (
                       <div className="nocode-inline-grid">
                         <input value={field.min} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, min: e.target.value } : item))} placeholder="Min" />
                         <input value={field.max} onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, max: e.target.value } : item))} placeholder="Max" />
@@ -1973,14 +2196,14 @@ export default function GrapesEditor({
                       />
                       Required
                     </label>
-                    {field.type === "checkbox" ? (
+                    {field.type === "checkbox" || field.type === "radio" ? (
                       <label className="nocode-checkbox-row">
                         <input
                           type="checkbox"
                           checked={field.checked}
                           onChange={(e) => setFormFields((prev) => prev.map((item) => item.id === field.id ? { ...item, checked: e.target.checked } : item))}
                         />
-                        Checked by default
+                        {field.type === "radio" ? "Select first option by default" : "Checked by default"}
                       </label>
                     ) : null}
                   </div>
@@ -2032,9 +2255,9 @@ export default function GrapesEditor({
                 onChange={(e) => {
                   const nextKey = e.target.value;
                   setFormWorkflowKey(nextKey);
-                  const applied = applyWorkflowKeyToSelectedForm(nextKey);
+                  const applied = applyWorkflowKeyToSelectedBinding(nextKey);
                   if (!applied) {
-                    setStatus("Select a form to assign workflow");
+                    setStatus("Select a form, workflow scope, or submit trigger");
                   }
                 }}
               >
@@ -2045,6 +2268,17 @@ export default function GrapesEditor({
               </select>
 
               <div className="nocode-form-builder-actions">
+                <button
+                  className="nocode-btn nocode-btn-secondary nocode-full-width"
+                  onClick={() => {
+                    const applied = applyWorkflowKeyToSelectedBinding(formWorkflowKey);
+                    if (!applied) {
+                      setStatus("Select a form, workflow scope, or submit trigger");
+                    }
+                  }}
+                >
+                  Apply To Selected
+                </button>
                 <button className="nocode-btn nocode-btn-secondary nocode-full-width" onClick={() => void createWorkflowFromBuilder()}>
                   Create Workflow
                 </button>
