@@ -114,6 +114,17 @@ const INPUT_FORM_QUICK_BLOCKS = [
 
 const INPUT_FORM_BLOCK_IDS: Set<string> = new Set(INPUT_FORM_QUICK_BLOCKS.map((item) => item.id));
 
+const CONTAINER_QUICK_BLOCKS = [
+  { id: "container-group", label: "Group" },
+  { id: "container-repeating-group", label: "Repeating Group" },
+  { id: "container-popup", label: "Popup" },
+  { id: "container-floating-group", label: "Floating Group" },
+  { id: "container-group-focus", label: "Group Focus" },
+  { id: "container-table", label: "Table" },
+] as const;
+
+const CONTAINER_BLOCK_IDS: Set<string> = new Set(CONTAINER_QUICK_BLOCKS.map((item) => item.id));
+
 function normalizeBlockText(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
@@ -128,6 +139,10 @@ function getBlockId(block: any): string {
 
 function isInputFormBlockModel(block: any): boolean {
   return INPUT_FORM_BLOCK_IDS.has(getBlockId(block));
+}
+
+function isContainerBlockModel(block: any): boolean {
+  return CONTAINER_BLOCK_IDS.has(getBlockId(block));
 }
 
 function getBlockSearchText(block: any): string {
@@ -727,9 +742,10 @@ export default function GrapesEditor({
   const renderBlockPanels = useCallback((searchQuery: string) => {
     const editor = editorRef.current;
     const visualContainer = document.getElementById("gjs-blocks");
+    const containerBlocksContainer = document.getElementById("gjs-container-blocks");
     const inputFormsContainer = document.getElementById("gjs-input-form-blocks");
 
-    if (!editor || !visualContainer || !inputFormsContainer) return;
+    if (!editor || !visualContainer || !containerBlocksContainer || !inputFormsContainer) return;
 
     const bm = editor.BlockManager;
     const collection = bm?.getAll?.();
@@ -737,7 +753,8 @@ export default function GrapesEditor({
       ? collection
       : collection?.toArray?.() || collection?.models || [];
 
-    const visualBlocks = allBlocks.filter((block: any) => !isInputFormBlockModel(block));
+    const visualBlocks = allBlocks.filter((block: any) => !isInputFormBlockModel(block) && !isContainerBlockModel(block));
+    const containerBlocks = allBlocks.filter((block: any) => isContainerBlockModel(block));
     const inputFormBlocks = allBlocks.filter((block: any) => isInputFormBlockModel(block));
     const normalizedQuery = normalizeBlockText(searchQuery);
 
@@ -745,7 +762,17 @@ export default function GrapesEditor({
       ? visualBlocks
       : visualBlocks.filter((block: any) => getBlockSearchText(block).includes(normalizedQuery));
 
+    const filteredContainerBlocks = !normalizedQuery
+      ? containerBlocks
+      : containerBlocks.filter((block: any) => getBlockSearchText(block).includes(normalizedQuery));
+
     bm.render(filteredVisualBlocks);
+
+    const containerBlocksEl = bm.render(filteredContainerBlocks, { external: true } as any);
+    containerBlocksContainer.innerHTML = "";
+    if (containerBlocksEl) {
+      containerBlocksContainer.appendChild(containerBlocksEl);
+    }
 
     const inputBlocksEl = bm.render(inputFormBlocks, { external: true } as any);
     inputFormsContainer.innerHTML = "";
@@ -1193,6 +1220,65 @@ export default function GrapesEditor({
       },
     });
 
+      editor.Commands.add("wb-popup-toggle", {
+      run(ed) {
+        const component = ed.getSelected();
+        if (!component) return;
+
+        const attrs = (component.getAttributes?.() || {}) as Record<string, string>;
+        const currentState = String(attrs["data-popup-state"] || "closed");
+        const nextState = currentState === "open" ? "closed" : "open";
+        const triggerId = window.prompt("Trigger element ID (button/link element to toggle this popup):", String(attrs["data-popup-trigger"] || ""));
+        
+        if (triggerId !== null) {
+          component.addAttributes({
+            "data-popup-state": nextState,
+            "data-popup-trigger": triggerId || "",
+          });
+          setStatus(`Popup configured: trigger=${triggerId || "(none)"}, state=${nextState}`);
+        }
+      },
+    });
+
+      editor.Commands.add("wb-repeating-config", {
+      run(ed) {
+        const component = ed.getSelected();
+        if (!component) return;
+
+        const attrs = (component.getAttributes?.() || {}) as Record<string, string>;
+        const currentSource = String(attrs["data-repeating-source"] || "");
+        const nextSource = window.prompt("Data source (API endpoint or data key):", currentSource);
+        
+        if (nextSource !== null) {
+          component.addAttributes({
+            "data-repeating-source": nextSource || "",
+            "data-repeating-item": String(attrs["data-repeating-item"] || "item"),
+          });
+          setStatus(`Repeating group configured: ${nextSource || "(manual)"} `);
+        }
+      },
+    });
+
+      editor.Commands.add("wb-table-columns", {
+      run(ed) {
+        const component = ed.getSelected();
+        if (!component) return;
+
+        const attrs = (component.getAttributes?.() || {}) as Record<string, string>;
+        const currentCols = String(attrs["data-table-columns"] || "Name,Role,Status");
+        const nextCols = window.prompt("Column names (comma-separated):", currentCols);
+        
+        if (nextCols !== null) {
+          const colArray = nextCols.split(",").map(c => c.trim()).filter(Boolean);
+          component.addAttributes({
+            "data-table-columns": colArray.join(","),
+            "data-table-source": String(attrs["data-table-source"] || ""),
+          });
+          setStatus(`Table columns configured: ${colArray.join(", ")}`);
+        }
+      },
+    });
+
       const applyEditToolbar = (component: any) => {
       const tag = String(component?.get?.("tagName") || "").toLowerCase();
       const toolbar = Array.isArray(component?.get?.("toolbar")) ? [...component.get("toolbar")] : [];
@@ -1218,6 +1304,28 @@ export default function GrapesEditor({
         });
       }
 
+      const containerType = String(component.get("attributes")?.["data-container-type"] || "");
+      if (containerType === "popup" && !toolbar.some((t: any) => t?.command === "wb-popup-toggle")) {
+        toolbar.unshift({
+          attributes: { class: "fa fa-compress", title: "Configure popup" },
+          command: "wb-popup-toggle",
+        });
+      }
+
+      if (containerType === "repeating-group" && !toolbar.some((t: any) => t?.command === "wb-repeating-config")) {
+        toolbar.unshift({
+          attributes: { class: "fa fa-repeat", title: "Configure data source" },
+          command: "wb-repeating-config",
+        });
+      }
+
+      if (containerType === "table" && !toolbar.some((t: any) => t?.command === "wb-table-columns")) {
+        toolbar.unshift({
+          attributes: { class: "fa fa-th", title: "Edit columns" },
+          command: "wb-table-columns",
+        });
+      }
+
       component.set("toolbar", toolbar);
     };
 
@@ -1226,10 +1334,34 @@ export default function GrapesEditor({
       applyEditToolbar(component);
 
       const tag = String(component.get("tagName") || "").toLowerCase();
+      const containerType = String(component.get("attributes")?.["data-container-type"] || "");
+      
       setIsImageSelected(tag === "img");
       setShowFloatingInspector(true);
+      
       if (tag === "img") {
         component.set("traits", ["alt", { type: "text", name: "src", label: "Image URL" }]);
+      }
+
+      if (containerType === "popup") {
+        component.set("traits", [
+          { type: "text", name: "data-popup-trigger", label: "Trigger Element ID" },
+          { type: "text", name: "data-popup-state", label: "State (open/closed)" },
+        ]);
+      }
+
+      if (containerType === "repeating-group") {
+        component.set("traits", [
+          { type: "text", name: "data-repeating-source", label: "Data Source" },
+          { type: "text", name: "data-repeating-item", label: "Item Variable Name" },
+        ]);
+      }
+
+      if (containerType === "table") {
+        component.set("traits", [
+          { type: "text", name: "data-table-columns", label: "Columns (comma-separated)" },
+          { type: "text", name: "data-table-source", label: "Data Source" },
+        ]);
       }
 
       syncWorkflowKeyFromSelectedBinding();
@@ -1257,6 +1389,8 @@ export default function GrapesEditor({
 
     const visualLabel = (icon: string, text: string) =>
       `<span class="wb-visual-block-label"><span class="wb-visual-block-icon">${icon}</span><span>${text}</span></span>`;
+
+    const containerAttributes = { "data-container-managed": "true" };
 
     editor.BlockManager.add("visual-text", {
       label: visualLabel("T", "Text"),
@@ -1327,6 +1461,42 @@ export default function GrapesEditor({
       label: visualLabel("F", "Form"),
       content:
         `<form data-workflow-key="" data-app-id="${appId || ""}" data-workflow-alert="true" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
+    });
+
+    editor.BlockManager.add("container-group", {
+      label: visualLabel("G", "Group"),
+      attributes: containerAttributes,
+      content: '<div data-container-type="group" style="min-height:120px;padding:16px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;"><h4 style="margin:0 0 8px;color:#0f172a;">Group</h4><p style="margin:0;color:#475569;">Drop elements inside this group.</p></div>',
+    });
+
+    editor.BlockManager.add("container-repeating-group", {
+      label: visualLabel("RG", "Repeating Group"),
+      attributes: containerAttributes,
+      content: '<section data-container-type="repeating-group" data-repeating-source="" data-repeating-item="item" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;padding:14px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;"><article style="padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;"><strong style="display:block;margin-bottom:4px;">Item 1</strong><span style="color:#64748b;">Repeating content</span></article><article style="padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;"><strong style="display:block;margin-bottom:4px;">Item 2</strong><span style="color:#64748b;">Repeating content</span></article></section>',
+    });
+
+    editor.BlockManager.add("container-popup", {
+      label: visualLabel("P", "Popup"),
+      attributes: containerAttributes,
+      content: '<div data-container-type="popup" data-popup-state="closed" data-popup-trigger="" style="position:relative;padding:12px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;"><div style="position:relative;max-width:360px;margin:0 auto;padding:16px;border-radius:12px;background:#ffffff;border:1px solid #cbd5e1;box-shadow:0 12px 30px rgba(15,23,42,0.12);"><h4 style="margin:0 0 8px;color:#0f172a;">Popup</h4><p style="margin:0 0 12px;color:#475569;">Use this as a modal content container.</p><button type="button" style="padding:8px 12px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Primary action</button></div></div>',
+    });
+
+    editor.BlockManager.add("container-floating-group", {
+      label: visualLabel("FG", "Floating Group"),
+      attributes: containerAttributes,
+      content: '<div data-container-type="floating-group" style="position:relative;min-height:180px;padding:14px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;"><div style="position:absolute;right:14px;bottom:14px;min-width:180px;padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;box-shadow:0 10px 24px rgba(15,23,42,0.14);"><strong style="display:block;margin-bottom:6px;color:#0f172a;">Floating Group</strong><span style="color:#64748b;">Pinned utility panel</span></div></div>',
+    });
+
+    editor.BlockManager.add("container-group-focus", {
+      label: visualLabel("GF", "Group Focus"),
+      attributes: containerAttributes,
+      content: '<div data-container-type="group-focus" style="position:relative;min-height:150px;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;"><div style="padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;"><strong style="display:block;color:#0f172a;">Focused Group</strong><span style="color:#64748b;">Anchor target element</span></div><div style="position:absolute;left:24px;top:102px;padding:10px 12px;border-radius:10px;background:#0f172a;color:#e2e8f0;box-shadow:0 8px 20px rgba(15,23,42,0.22);">Group focus content</div></div>',
+    });
+
+    editor.BlockManager.add("container-table", {
+      label: visualLabel("TB", "Table"),
+      attributes: containerAttributes,
+      content: '<div data-container-type="table" data-table-columns="Name,Role,Status" data-table-source="" style="overflow:auto;border:1px solid #cbd5e1;border-radius:12px;background:#fff;"><table style="width:100%;border-collapse:collapse;min-width:420px;"><thead><tr><th style="text-align:left;padding:10px;background:#f8fafc;border-bottom:1px solid #cbd5e1;">Name</th><th style="text-align:left;padding:10px;background:#f8fafc;border-bottom:1px solid #cbd5e1;">Role</th><th style="text-align:left;padding:10px;background:#f8fafc;border-bottom:1px solid #cbd5e1;">Status</th></tr></thead><tbody><tr><td style="padding:10px;border-bottom:1px solid #e2e8f0;">Alex</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;">Designer</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;">Active</td></tr><tr><td style="padding:10px;">Jordan</td><td style="padding:10px;">Developer</td><td style="padding:10px;">Paused</td></tr></tbody></table></div>',
     });
 
     const inputFormsCategory = "Input forms";
@@ -2006,9 +2176,9 @@ export default function GrapesEditor({
             <div id="gjs-blocks" className="nocode-pane-scroll nocode-left-pane-scroll" />
           </details>
 
-          <details className="nocode-left-accordion">
+          <details className="nocode-left-accordion" open>
             <summary>Containers</summary>
-            <p className="nocode-small-helper">Container blocks are available in Visual Elements.</p>
+            <div id="gjs-container-blocks" className="nocode-pane-scroll nocode-left-pane-scroll" />
           </details>
 
           <details className="nocode-left-accordion" open>
