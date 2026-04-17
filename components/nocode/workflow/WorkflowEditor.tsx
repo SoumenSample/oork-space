@@ -1,17 +1,34 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import ReactFlow, {
+import {
+  ReactFlow,
   addEdge,
   Background,
   Controls,
   MiniMap,
   useEdgesState,
   useNodesState,
-  Connection,
-  Edge,
-} from "reactflow";
-import "reactflow/dist/style.css";
+  type Connection,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+
+type BranchValue = "always" | "true" | "false";
+
+type WorkflowNodeData = {
+  label?: string;
+  type?: string;
+  config?: Record<string, unknown>;
+};
+
+type WorkflowEdgeData = {
+  branch?: BranchValue;
+};
+
+type WorkflowNode = Node<WorkflowNodeData>;
+type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 type EventOption = {
   value: string;
@@ -30,9 +47,9 @@ type ActionOption = {
 };
 
 type Props = {
-  initialNodes: any[];
-  initialEdges: any[];
-  onSave: (graph: { nodes: any[]; edges: any[] }) => Promise<void>;
+  initialNodes: WorkflowNode[];
+  initialEdges: WorkflowEdge[];
+  onSave: (graph: { nodes: WorkflowNode[]; edges: WorkflowEdge[] }) => Promise<void>;
   onPublish: () => Promise<void>;
 };
 
@@ -89,8 +106,8 @@ function getActionLabel(actionType: string): string {
 }
 
 export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onPublish }: Props) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes || []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges || []);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>(initialNodes || []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>(initialEdges || []);
   const [selectedTriggerType, setSelectedTriggerType] = useState<string>("trigger.formSubmit");
   const [selectedActionType, setSelectedActionType] = useState<ActionOption["value"]>("action.alert");
   const [eventSearch, setEventSearch] = useState<string>("");
@@ -121,7 +138,7 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
   }, [eventSearch]);
 
   const onConnect = useCallback(
-    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, label: "always", data: { branch: "always" } }, eds)),
+    (params: Connection) => setEdges((eds) => addEdge({ ...params, label: "always", data: { branch: "always" as BranchValue } }, eds)),
     [setEdges]
   );
 
@@ -142,14 +159,14 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
     }));
   }, [setNodes]);
 
-  const updateEdgeBranch = useCallback((edgeId: string, branch: "always" | "true" | "false") => {
+  const updateEdgeBranch = useCallback((edgeId: string, branch: BranchValue) => {
     setEdges((prev) => prev.map((edge) => {
       if (String(edge.id || "") !== edgeId) return edge;
       return {
         ...edge,
         label: branch,
         data: {
-          ...((edge.data || {}) as Record<string, unknown>),
+          ...(edge.data || {}),
           branch,
         },
       };
@@ -183,8 +200,82 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
     )));
   }, [selectedEdgeIds, selectedNodeIds, setEdges, setNodes]);
 
+  const flowStyles = `
+    .workflow-flow .react-flow {
+      --xy-node-background-color-default: var(--card);
+      --xy-node-color-default: var(--card-foreground);
+      --xy-node-border-default: 1px solid var(--border);
+      --xy-controls-button-background-color-default: var(--card);
+      --xy-controls-button-color-default: var(--card-foreground);
+      --xy-controls-button-background-color-hover-default: var(--accent);
+      --xy-controls-button-color-hover-default: var(--accent-foreground);
+      --xy-controls-button-border-color-default: var(--border);
+      --xy-minimap-background-color-default: var(--card);
+    }
+
+    .workflow-flow .react-flow__node,
+    .workflow-flow .react-flow__node-default {
+      background: var(--card) !important;
+      color: var(--card-foreground) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 0.75rem;
+      min-width: 200px;
+      padding: 10px 14px;
+      text-align: center;
+      font-weight: 500;
+      box-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.45);
+    }
+
+    .workflow-flow .react-flow__handle {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--background);
+      background: var(--primary);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+
+    .workflow-flow .react-flow__controls {
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -15px rgba(0, 0, 0, 0.5);
+      background: var(--card);
+    }
+
+    .workflow-flow .react-flow__controls-button {
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--card) !important;
+      color: var(--card-foreground) !important;
+    }
+
+    .workflow-flow .react-flow__controls-button:hover {
+      background: var(--accent) !important;
+      color: var(--accent-foreground) !important;
+    }
+
+    .workflow-flow .react-flow__controls-button:last-child {
+      border-bottom: 0;
+    }
+
+    .workflow-flow .react-flow__controls-button svg,
+    .workflow-flow .react-flow__controls-button path {
+      fill: currentColor !important;
+      stroke: currentColor !important;
+      opacity: 1 !important;
+    }
+
+    .workflow-flow .react-flow__minimap {
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--card);
+    }
+  `;
+
   return (
-    <div style={{ height: "80vh", border: "1px solid #ddd" }}>
+    <div className="workflow-flow h-[80vh] overflow-hidden rounded-xl border border-border/80 bg-background">
       <div style={{ padding: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
           value={eventSearch}
@@ -365,7 +456,7 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
             <label className="text-sm">Branch</label>
             <select
               value={String(selectedEdge.data?.branch || "always")}
-              onChange={(e) => updateEdgeBranch(String(selectedEdge.id || ""), e.target.value as "always" | "true" | "false")}
+              onChange={(e) => updateEdgeBranch(String(selectedEdge.id || ""), e.target.value as BranchValue)}
               className="border p-1 rounded bg-white text-black dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-700"
             >
               <option value="always">always</option>
@@ -392,6 +483,8 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
         <Controls />
         <Background />
       </ReactFlow>
+
+      <style jsx global>{flowStyles}</style>
     </div>
   );
 }

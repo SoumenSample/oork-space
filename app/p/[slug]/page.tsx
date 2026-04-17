@@ -173,25 +173,57 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
     return nodeType + ': ' + failedStep.error.trim();
   }
 
-  async function onSubmit(e) {
-    const form = e.target;
-    if (!form || !form.matches('form[data-workflow-key]')) return;
-    e.preventDefault();
+  function parseAlertPreference(value) {
+    const alertPref = String(value || 'true').toLowerCase();
+    return alertPref !== 'false' && alertPref !== '0' && alertPref !== 'off';
+  }
 
-    const workflowKey = form.getAttribute('data-workflow-key') || '';
-    const appId = form.getAttribute('data-app-id') || '';
-    const alertPref = (form.getAttribute('data-workflow-alert') || 'true').toLowerCase();
-    const shouldAlert = alertPref !== 'false' && alertPref !== '0' && alertPref !== 'off';
+  function toSerializableValue(value) {
+    if (value instanceof File) {
+      return {
+        name: value.name,
+        size: value.size,
+        type: value.type,
+      };
+    }
 
+    return value;
+  }
+
+  function assignCollectedValue(target, key, value) {
+    if (!Object.prototype.hasOwnProperty.call(target, key)) {
+      target[key] = value;
+      return;
+    }
+
+    const prev = target[key];
+    if (Array.isArray(prev)) {
+      prev.push(value);
+      return;
+    }
+
+    target[key] = [prev, value];
+  }
+
+  function formDataToObject(fd) {
     const data = {};
-    const fd = new FormData(form);
-    for (const [k, v] of fd.entries()) data[k] = v;
+    for (const [k, v] of fd.entries()) {
+      assignCollectedValue(data, k, toSerializableValue(v));
+    }
+    return data;
+  }
+
+  async function triggerWorkflowExecution(params) {
+    const appId = String(params.appId || '');
+    const workflowKey = String(params.workflowKey || '');
+    const shouldAlert = Boolean(params.shouldAlert);
+    const formData = params.formData || {};
 
     try {
       const res = await fetch('/api/nocode/trigger/form-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appId, workflowKey, formData: data })
+        body: JSON.stringify({ appId, workflowKey, formData })
       });
 
       const result = await res.json().catch(() => ({}));
@@ -200,28 +232,28 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
       }
 
       const runId = result?.runId;
-      if (shouldAlert && runId) {
-        const run = await pollRunResult(runId);
-        const logMessages = run ? extractLogMessages(run) : [];
-        for (const msg of logMessages) {
-          console.info('[workflow:action.log]', msg);
-        }
+      if (!shouldAlert || !runId) return;
 
-        const alertMsg = run ? extractAlertMessage(run) : null;
-        
-        if (alertMsg) {
-          const alertType = run.status === 'success' ? 'success' : 'error';
-          showNotification(alertMsg, alertType);
-        } else {
-          const isFailed = run && run.status === 'failed';
-          const statusText = run ? (run.status === 'success' ? 'completed' : run.status) : 'triggered';
-          const failureReason = isFailed ? extractRunFailureReason(run) : '';
-          const details = failureReason ? ' - ' + failureReason : '';
-          showNotification(
-            'Workflow ' + statusText + details + ' (Run: ' + runId + ')',
-            isFailed ? 'error' : 'success'
-          );
-        }
+      const run = await pollRunResult(runId);
+      const logMessages = run ? extractLogMessages(run) : [];
+      for (const msg of logMessages) {
+        console.info('[workflow:action.log]', msg);
+      }
+
+      const alertMsg = run ? extractAlertMessage(run) : null;
+
+      if (alertMsg) {
+        const alertType = run.status === 'success' ? 'success' : 'error';
+        showNotification(alertMsg, alertType);
+      } else {
+        const isFailed = run && run.status === 'failed';
+        const statusText = run ? (run.status === 'success' ? 'completed' : run.status) : 'triggered';
+        const failureReason = isFailed ? extractRunFailureReason(run) : '';
+        const details = failureReason ? ' - ' + failureReason : '';
+        showNotification(
+          'Workflow ' + statusText + details + ' (Run: ' + runId + ')',
+          isFailed ? 'error' : 'success'
+        );
       }
     } catch (err) {
       if (shouldAlert) {
@@ -231,7 +263,149 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
     }
   }
 
+  function resolveStandaloneScope(triggerElement) {
+    const explicitSelector = String(triggerElement.getAttribute('data-workflow-scope') || '').trim();
+    if (explicitSelector && explicitSelector !== 'true') {
+      const explicitScope = document.querySelector(explicitSelector);
+      if (explicitScope) return explicitScope;
+    }
+
+    const nearestScope = triggerElement.closest('[data-workflow-scope]');
+    if (nearestScope) return nearestScope;
+
+    return document.body;
+  }
+
+  function resolveFieldKey(field, index) {
+    const explicit = String(field.getAttribute('data-field-key') || '').trim();
+    if (explicit) return explicit;
+
+    const name = String(field.getAttribute('name') || '').trim();
+    if (name) return name;
+
+    const id = String(field.getAttribute('id') || '').trim();
+    if (id) return id;
+
+    return 'field_' + index;
+  }
+
+  function collectStandalonePayload(scope) {
+    const data = {};
+    const fields = Array.from(scope.querySelectorAll('input, textarea, select'));
+
+    for (let i = 0; i < fields.length; i += 1) {
+      const field = fields[i];
+      const key = resolveFieldKey(field, i);
+      if (!key) continue;
+
+      if (field instanceof HTMLInputElement) {
+        const type = String(field.type || 'text').toLowerCase();
+
+        if (type === 'radio') {
+          if (!field.checked) continue;
+          assignCollectedValue(data, key, field.value);
+          continue;
+        }
+
+        if (type === 'checkbox') {
+          assignCollectedValue(data, key, Boolean(field.checked));
+          continue;
+        }
+
+        if (type === 'file') {
+          const files = Array.from(field.files || []);
+          if (!files.length) {
+            assignCollectedValue(data, key, null);
+            continue;
+          }
+
+          if (files.length === 1) {
+            assignCollectedValue(data, key, toSerializableValue(files[0]));
+            continue;
+          }
+
+          assignCollectedValue(data, key, files.map((file) => toSerializableValue(file)));
+          continue;
+        }
+
+        assignCollectedValue(data, key, field.value);
+        continue;
+      }
+
+      if (field instanceof HTMLSelectElement) {
+        if (field.multiple) {
+          const values = Array.from(field.selectedOptions || []).map((opt) => opt.value);
+          assignCollectedValue(data, key, values);
+        } else {
+          assignCollectedValue(data, key, field.value);
+        }
+        continue;
+      }
+
+      if (field instanceof HTMLTextAreaElement) {
+        assignCollectedValue(data, key, field.value);
+      }
+    }
+
+    return data;
+  }
+
+  async function onSubmit(e) {
+    const form = e.target;
+    if (!form || !form.matches('form[data-workflow-key]')) return;
+    e.preventDefault();
+
+    const workflowKey = form.getAttribute('data-workflow-key') || '';
+    const appId = form.getAttribute('data-app-id') || '';
+    const shouldAlert = parseAlertPreference(form.getAttribute('data-workflow-alert'));
+    const data = formDataToObject(new FormData(form));
+
+    await triggerWorkflowExecution({ appId, workflowKey, shouldAlert, formData: data });
+  }
+
+  async function onStandaloneTriggerClick(e) {
+    const target = e.target;
+    if (!target || typeof target.closest !== 'function') return;
+
+    const trigger = target.closest('[data-workflow-submit]');
+    if (!trigger) return;
+
+    if (trigger.closest('form[data-workflow-key]')) return;
+
+    e.preventDefault();
+
+    const scope = resolveStandaloneScope(trigger);
+
+    const workflowKey = String(
+      trigger.getAttribute('data-workflow-key')
+      || (scope.getAttribute ? scope.getAttribute('data-workflow-key') : '')
+      || ''
+    ).trim();
+
+    const appId = String(
+      trigger.getAttribute('data-app-id')
+      || (scope.getAttribute ? scope.getAttribute('data-app-id') : '')
+      || ''
+    ).trim();
+
+    const shouldAlert = parseAlertPreference(
+      trigger.getAttribute('data-workflow-alert')
+      || (scope.getAttribute ? scope.getAttribute('data-workflow-alert') : 'true')
+    );
+
+    if (!workflowKey || !appId) {
+      if (shouldAlert) {
+        showNotification('Missing workflowKey or appId on standalone workflow trigger', 'error');
+      }
+      return;
+    }
+
+    const data = collectStandalonePayload(scope);
+    await triggerWorkflowExecution({ appId, workflowKey, shouldAlert, formData: data });
+  }
+
   document.addEventListener('submit', onSubmit);
+  document.addEventListener('click', onStandaloneTriggerClick);
 })();
 
 ${js}
