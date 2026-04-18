@@ -106,6 +106,10 @@ export async function executeWorkflowRun(params: {
     );
 
     const executionContext: Record<string, unknown> = {
+      runId: params.runId,
+      appId: params.appId,
+      workflowId: params.workflowId,
+      userId: String(workflow.userId || run.userId || ""),
       triggerType: params.triggerType,
       trigger: params.triggerPayload,
       steps: {},

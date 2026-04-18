@@ -42,7 +42,7 @@ type EventCategory = {
 };
 
 type ActionOption = {
-  value: "action.alert" | "action.log" | "action.webhook";
+  value: "action.alert" | "action.log" | "action.webhook" | "action.dbInsert";
   label: string;
 };
 
@@ -83,6 +83,7 @@ const ACTION_OPTIONS: ActionOption[] = [
   { value: "action.alert", label: "Alert (Test)" },
   { value: "action.log", label: "Log" },
   { value: "action.webhook", label: "Webhook" },
+  { value: "action.dbInsert", label: "Create DB Row" },
 ];
 
 function getTriggerLabel(triggerType: string): string {
@@ -94,6 +95,18 @@ function getDefaultConfig(type: string): Record<string, unknown> {
   if (type === "trigger.webhook") return { secret: "" };
   if (type === "trigger.schedule") return { cron: "*/5 * * * *" };
   if (type === "action.webhook") return { url: "" };
+  if (type === "action.dbInsert") {
+    return {
+      databaseId: "",
+      titleField: "title",
+      descriptionField: "description",
+      emailField: "email",
+      fromDateField: "fromDate",
+      toDateField: "toDate",
+      milestonesField: "milestones",
+      statusValue: "To Do",
+    };
+  }
   if (type === "action.log") return { message: "Workflow log" };
   if (type === "action.alert") return { message: "Workflow test alert" };
   if (type.startsWith("condition.")) return { key: "always" };
@@ -416,6 +429,74 @@ export default function WorkflowEditor({ initialNodes, initialEdges, onSave, onP
               onChange={(e) => updateNodeConfig(String(selectedNode.id), "url", e.target.value)}
               className="border p-1 rounded min-w-[300px]"
               placeholder="https://example.com/webhook"
+            />
+          </>
+        )}
+
+        {selectedNode && String(selectedNode.data?.type || "") === "action.dbInsert" && (
+          <>
+            <label className="text-sm">Database ID</label>
+            <input
+              value={String(selectedNode.data?.config?.databaseId || "")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "databaseId", e.target.value)}
+              className="border p-1 rounded min-w-[260px]"
+              placeholder="Optional: use form binding if empty"
+            />
+
+            <label className="text-sm">Title field key</label>
+            <input
+              value={String(selectedNode.data?.config?.titleField || "title")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "titleField", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="title"
+            />
+
+            <label className="text-sm">Description field key</label>
+            <input
+              value={String(selectedNode.data?.config?.descriptionField || "description")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "descriptionField", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="description"
+            />
+
+            <label className="text-sm">Email field key</label>
+            <input
+              value={String(selectedNode.data?.config?.emailField || "email")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "emailField", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="email"
+            />
+
+            <label className="text-sm">From date field key</label>
+            <input
+              value={String(selectedNode.data?.config?.fromDateField || "fromDate")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "fromDateField", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="fromDate"
+            />
+
+            <label className="text-sm">To date field key</label>
+            <input
+              value={String(selectedNode.data?.config?.toDateField || "toDate")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "toDateField", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="toDate"
+            />
+
+            <label className="text-sm">Milestones field key</label>
+            <input
+              value={String(selectedNode.data?.config?.milestonesField || "milestones")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "milestonesField", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="milestones"
+            />
+
+            <label className="text-sm">Status value</label>
+            <input
+              value={String(selectedNode.data?.config?.statusValue || "To Do")}
+              onChange={(e) => updateNodeConfig(String(selectedNode.id), "statusValue", e.target.value)}
+              className="border p-1 rounded min-w-[220px]"
+              placeholder="To Do"
             />
           </>
         )}

@@ -44,7 +44,7 @@ export function safeHtml(html: string): string {
       audio: ["src", "controls", "autoplay", "loop", "muted", "preload"],
       source: ["src", "type", "media", "sizes", "srcset"],
       track: ["kind", "src", "srclang", "label", "default"],
-      form: ["method", "action", "data-workflow-key", "data-app-id", "data-workflow-alert"],
+      form: ["method", "action", "data-workflow-key", "data-app-id", "data-project-id", "data-database-id", "data-workflow-alert"],
       input: ["name", "type", "value", "placeholder", "required", "min", "max", "checked"],
       button: ["type"],
       textarea: ["name", "placeholder", "required", "min", "max"],

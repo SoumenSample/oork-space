@@ -216,6 +216,7 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
   async function triggerWorkflowExecution(params) {
     const appId = String(params.appId || '');
     const workflowKey = String(params.workflowKey || '');
+    const databaseId = String(params.databaseId || '');
     const shouldAlert = Boolean(params.shouldAlert);
     const formData = params.formData || {};
 
@@ -223,7 +224,7 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
       const res = await fetch('/api/nocode/trigger/form-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appId, workflowKey, formData })
+        body: JSON.stringify({ appId, workflowKey, databaseId, formData })
       });
 
       const result = await res.json().catch(() => ({}));
@@ -357,10 +358,11 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
 
     const workflowKey = form.getAttribute('data-workflow-key') || '';
     const appId = form.getAttribute('data-app-id') || '';
+    const databaseId = form.getAttribute('data-database-id') || '';
     const shouldAlert = parseAlertPreference(form.getAttribute('data-workflow-alert'));
     const data = formDataToObject(new FormData(form));
 
-    await triggerWorkflowExecution({ appId, workflowKey, shouldAlert, formData: data });
+    await triggerWorkflowExecution({ appId, workflowKey, databaseId, shouldAlert, formData: data });
   }
 
   async function onStandaloneTriggerClick(e) {
@@ -388,6 +390,12 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
       || ''
     ).trim();
 
+    const databaseId = String(
+      trigger.getAttribute('data-database-id')
+      || (scope.getAttribute ? scope.getAttribute('data-database-id') : '')
+      || ''
+    ).trim();
+
     const shouldAlert = parseAlertPreference(
       trigger.getAttribute('data-workflow-alert')
       || (scope.getAttribute ? scope.getAttribute('data-workflow-alert') : 'true')
@@ -401,7 +409,7 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
     }
 
     const data = collectStandalonePayload(scope);
-    await triggerWorkflowExecution({ appId, workflowKey, shouldAlert, formData: data });
+    await triggerWorkflowExecution({ appId, workflowKey, databaseId, shouldAlert, formData: data });
   }
 
   document.addEventListener('submit', onSubmit);

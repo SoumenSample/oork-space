@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/dbConnect";
 import { getAuthUser } from "@/lib/authUser";
 import NocodeApp from "@/lib/models/NocodeApp";
+import Project from "@/lib/models/Project";
 import { uniqueSlug } from "@/lib/nocode/slug";
 
 export async function POST(req: Request) {
@@ -15,9 +16,22 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const name = String(body?.name || "Untitled App");
+    const projectId = String(body?.projectId || "");
+    const defaultDatabaseId = body?.defaultDatabaseId ? String(body.defaultDatabaseId) : "";
+
+    if (!projectId) {
+      return NextResponse.json({ error: "projectId is required" }, { status: 400 });
+    }
+
+    const ownedProject = await Project.findOne({ _id: projectId, ownerId: auth.userId }).select("_id");
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
 
     const app = await NocodeApp.create({
       userId: auth.userId,
+      projectId,
+      defaultDatabaseId: defaultDatabaseId || null,
       name,
       key: uniqueSlug(name),
     });

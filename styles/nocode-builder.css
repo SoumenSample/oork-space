@@ -779,6 +779,69 @@
   gap: 8px;
 }
 
+.nocode-data-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--nb-border);
+  border-radius: 10px;
+  background: var(--nb-input-bg);
+  padding: 8px;
+}
+
+.nocode-data-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nocode-data-section-head strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--nb-text);
+}
+
+.nocode-data-section-head p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--nb-muted-text);
+}
+
+.nocode-data-grid-wrap {
+  border: 1px solid var(--nb-border);
+  border-radius: 8px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--nb-surface);
+}
+
+.nocode-data-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.nocode-data-grid th,
+.nocode-data-grid td {
+  border-bottom: 1px solid var(--nb-border);
+  padding: 6px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nocode-data-grid th {
+  position: sticky;
+  top: 0;
+  background: var(--nb-surface-muted);
+  color: var(--nb-text);
+  z-index: 1;
+}
+
 .nocode-workflow-list {
   display: flex;
   flex-direction: column;
