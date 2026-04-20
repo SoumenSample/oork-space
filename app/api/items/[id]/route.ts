@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/dbConnect";
 import DatabaseItem from "@/lib/models/GalleryItem";
+import BoardDatabaseItem from "@/lib/models/DatabaseItem";
 import Database from "@/lib/models/Database";
 import DatabaseProperty from "@/lib/models/DatabaseProperty";
 import { getAuthUser } from "@/lib/authUser";
@@ -52,7 +53,13 @@ export async function PATCH(
   const { id } = await context.params;
   const body = await req.json();
 
-  const item = await DatabaseItem.findById(id).select("_id databaseId title values");
+  const galleryItem = await DatabaseItem.findById(id).select("_id databaseId title values");
+  const boardItem = galleryItem
+    ? null
+    : await BoardDatabaseItem.findById(id).select("_id databaseId values");
+  const item = galleryItem || boardItem;
+  const itemSource: "gallery" | "board" = galleryItem ? "gallery" : "board";
+
   if (!item) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
@@ -93,7 +100,11 @@ export async function PATCH(
   const previousValues = (item.values || {}) as Record<string, unknown>;
 
   if (body?.title !== undefined) {
-    setPayload.title = body.title;
+    if (itemSource === "gallery") {
+      setPayload.title = body.title;
+    } else {
+      setPayload["values.title"] = body.title;
+    }
   }
 
   if (body?.values && typeof body.values === "object") {
@@ -138,11 +149,17 @@ export async function PATCH(
     );
   }
 
-  const updated = await DatabaseItem.findByIdAndUpdate(
-    id,
-    { $set: setPayload },
-    { new: true, runValidators: false }
-  );
+  const updated = itemSource === "gallery"
+    ? await DatabaseItem.findByIdAndUpdate(
+      id,
+      { $set: setPayload },
+      { new: true, runValidators: false }
+    )
+    : await BoardDatabaseItem.findByIdAndUpdate(
+      id,
+      { $set: setPayload },
+      { new: true, runValidators: false }
+    );
 
   if (!updated) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
@@ -162,7 +179,13 @@ export async function DELETE(
   }
 
   const { id } = await context.params;
-  const item = await DatabaseItem.findById(id).select("_id databaseId");
+  const galleryItem = await DatabaseItem.findById(id).select("_id databaseId");
+  const boardItem = galleryItem
+    ? null
+    : await BoardDatabaseItem.findById(id).select("_id databaseId");
+  const item = galleryItem || boardItem;
+  const itemSource: "gallery" | "board" = galleryItem ? "gallery" : "board";
+
   if (!item) {
     return NextResponse.json({ success: true });
   }
@@ -186,7 +209,11 @@ export async function DELETE(
     }
   }
 
-  await DatabaseItem.findByIdAndDelete(id);
+  if (itemSource === "gallery") {
+    await DatabaseItem.findByIdAndDelete(id);
+  } else {
+    await BoardDatabaseItem.findByIdAndDelete(id);
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -1,6 +1,7 @@
 import connectDB from "@/lib/dbConnect";
 import Database from "@/lib/models/Database";
 import DatabaseItem from "@/lib/models/DatabaseItem";
+import DatabaseProperty from "@/lib/models/DatabaseProperty";
 import NocodeApp from "@/lib/models/NocodeApp";
 
 function getString(value: unknown, fallback = ""): string {
@@ -21,6 +22,10 @@ function pickPayloadValue(
 ): unknown {
   const key = getString(configuredKey, fallbackKey);
   return payload[key];
+}
+
+function normalizeLookupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 export async function runAction(
@@ -63,7 +68,22 @@ export async function runAction(
     const payload = getTriggerPayload(context);
     const configuredDatabaseId = getString(config?.databaseId || "");
     const payloadDatabaseId = getString(payload.__databaseId || "");
-    const databaseId = configuredDatabaseId || payloadDatabaseId;
+    let databaseId = configuredDatabaseId || payloadDatabaseId;
+
+    const appId = getString(context?.appId || "");
+    let appProjectId = "";
+    if (appId) {
+      const app = await NocodeApp.findById(appId).select("_id projectId defaultDatabaseId");
+      if (!app) {
+        throw new Error("App not found for action.dbInsert");
+      }
+
+      appProjectId = String(app.projectId || "");
+      const appDefaultDatabaseId = getString(app.defaultDatabaseId || "");
+      if (!databaseId) {
+        databaseId = appDefaultDatabaseId;
+      }
+    }
 
     if (!databaseId) {
       throw new Error("Missing databaseId for action.dbInsert");
@@ -74,18 +94,23 @@ export async function runAction(
       throw new Error("Database not found for action.dbInsert");
     }
 
-    const appId = getString(context?.appId || "");
-    if (appId) {
-      const app = await NocodeApp.findById(appId).select("_id projectId");
-      if (!app) {
-        throw new Error("App not found for action.dbInsert");
-      }
-
-      const appProjectId = String(app.projectId || "");
-      if (appProjectId && appProjectId !== String(database.projectId || "")) {
-        throw new Error("Selected database is outside app project scope");
-      }
+    if (appProjectId && appProjectId !== String(database.projectId || "")) {
+      throw new Error("Selected database is outside app project scope");
     }
+
+    const properties = await DatabaseProperty.find({ databaseId })
+      .select("_id name")
+      .lean();
+
+    const propertyIdByLookup = new Map<string, string>();
+    properties.forEach((property: any) => {
+      const propertyId = getString(property?._id || "");
+      const propertyName = getString(property?.name || "");
+      const lookupKey = normalizeLookupKey(propertyName);
+      if (propertyId && lookupKey && !propertyIdByLookup.has(lookupKey)) {
+        propertyIdByLookup.set(lookupKey, propertyId);
+      }
+    });
 
     const payloadWithoutMeta = Object.fromEntries(
       Object.entries(payload).filter(([key]) => !key.startsWith("__"))
@@ -118,6 +143,13 @@ export async function runAction(
       progress: 0,
     };
 
+    Object.entries({ ...values }).forEach(([key, value]) => {
+      const propertyId = propertyIdByLookup.get(normalizeLookupKey(key));
+      if (propertyId && values[propertyId] === undefined) {
+        values[propertyId] = value;
+      }
+    });
+
     const ownerId = getString(database.ownerId || context?.userId || "");
 
     const created = await DatabaseItem.create({
@@ -125,6 +157,33 @@ export async function runAction(
       databaseId,
       values,
     });
+
+    const createdAtDate = created?.createdAt ? new Date(created.createdAt) : new Date();
+    const createdAtIso = Number.isNaN(createdAtDate.getTime())
+      ? new Date().toISOString()
+      : createdAtDate.toISOString();
+    const createdAtDateOnly = createdAtIso.slice(0, 10);
+
+    const systemValues: Record<string, unknown> = {
+      id: String(created._id),
+      dateCreated: createdAtDateOnly,
+    };
+
+    const valuesPatch: Record<string, unknown> = {};
+    Object.entries(systemValues).forEach(([key, value]) => {
+      valuesPatch[`values.${key}`] = value;
+      const propertyId = propertyIdByLookup.get(normalizeLookupKey(key));
+      if (propertyId) {
+        valuesPatch[`values.${propertyId}`] = value;
+      }
+    });
+
+    if (Object.keys(valuesPatch).length) {
+      await DatabaseItem.updateOne(
+        { _id: created._id },
+        { $set: valuesPatch }
+      );
+    }
 
     return {
       inserted: true,

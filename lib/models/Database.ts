@@ -77,8 +77,6 @@ export function getDefaultViews(viewType: string) {
   if (["todo","table","timeline"].includes(viewType)) {
     return [
       { id:"all",       label:"visualization", icon:"star",   type:"all",       isDefault:true,  filters:[] },
-      // { id:"by-status", label:"input", icon:"circle", type:"by-status", groupBy:"status",filters:[] },
-      { id:"my-tasks",  label:"show data",  icon:"user",   type:"my-tasks",  filters:[{field:"assignee",op:"eq",value:"me"}] },
     ];
   }
   if (["board"].includes(viewType)) {

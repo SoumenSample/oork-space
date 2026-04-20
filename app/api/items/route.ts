@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/dbConnect";
 import DatabaseItem from "@/lib/models/GalleryItem";
+import BoardDatabaseItem from "@/lib/models/DatabaseItem";
 import Database from "@/lib/models/Database";
 import DatabaseProperty from "@/lib/models/DatabaseProperty";
 import { getAuthUser } from "@/lib/authUser";
@@ -72,8 +73,23 @@ export async function GET(req: Request) {
     query.$or = emailMatches;
   }
 
-  const items = await DatabaseItem.find(query).sort({ createdAt: 1 });
-  return NextResponse.json(items);
+  const boardQuery: Record<string, unknown> = { databaseId };
+  if (query.$or) {
+    boardQuery.$or = query.$or;
+  }
+
+  const [galleryItems, boardItems] = await Promise.all([
+    DatabaseItem.find(query).lean(),
+    BoardDatabaseItem.find(boardQuery).lean(),
+  ]);
+
+  const combined = [...galleryItems, ...boardItems].sort((a: any, b: any) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aTime - bTime;
+  });
+
+  return NextResponse.json(combined);
 }
 
 export async function POST(req: Request) {

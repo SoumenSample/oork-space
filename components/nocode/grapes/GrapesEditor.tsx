@@ -52,6 +52,17 @@ type WorkflowRunItem = {
   triggerType?: string;
   stepLogs?: WorkflowStepLog[];
 };
+type WorkflowBranchValue = "always" | "true" | "false";
+type WorkflowSidebarBridgeState = {
+  selectedNodeId: string;
+  selectedNodeLabel: string;
+  selectedNodeType: string;
+  selectedNodeConfig: Record<string, unknown>;
+  selectedEdgeId: string;
+  selectedEdgeBranch: WorkflowBranchValue;
+  databaseOptions: Array<{ _id: string; name: string }>;
+  isDatabaseOptionsLoading: boolean;
+};
 type WorkspaceProjectItem = {
   _id: string;
   name: string;
@@ -99,6 +110,33 @@ type FormField = {
   max: string;
 };
 
+type FormDatabasePropertyType =
+  | "title"
+  | "text"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "date"
+  | "checkbox"
+  | "email"
+  | "formula"
+  | "files"
+  | "url"
+  | "person";
+
+type FormDatabasePropertyPayload = {
+  name: string;
+  type: FormDatabasePropertyType;
+  options?: string[];
+};
+
+type PropertySyncResult = {
+  createdCount: number;
+  skippedCount: number;
+  failedProperties: string[];
+  totalCandidates: number;
+};
+
 const FORM_FIELD_TYPES_WITH_OPTIONS = new Set<FormFieldType>(["select", "radio"]);
 const FORM_FIELD_TYPES_WITH_PLACEHOLDER = new Set<FormFieldType>([
   "text",
@@ -115,6 +153,9 @@ const FORM_FIELD_TYPES_WITH_MIN_MAX = new Set<FormFieldType>(["number", "date", 
 const INPUT_FORM_QUICK_BLOCKS = [
   { id: "input-form-workflow-scope", label: "Workflow Scope" },
   { id: "input-form-submit", label: "Submit Workflow" },
+  { id: "input-form-auth-login", label: "Auth Login" },
+  { id: "input-form-auth-signup", label: "Auth Signup" },
+  { id: "input-form-auth-verify-otp", label: "Auth Verify OTP" },
   { id: "input-form-text", label: "Input" },
   { id: "input-form-textarea", label: "Multiline Input" },
   { id: "input-form-checkbox", label: "Checkbox" },
@@ -168,6 +209,192 @@ function formatDataPreviewCell(value: unknown): string {
     }
   }
   return String(value);
+}
+
+function normalizeFormFieldName(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeDatabasePropertyLookupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function mapFormFieldTypeToDatabasePropertyType(type: FormFieldType): FormDatabasePropertyType {
+  if (type === "email") return "email";
+  if (type === "number" || type === "range") return "number";
+  if (type === "checkbox") return "checkbox";
+  if (type === "date" || type === "datetime-local") return "date";
+  if (type === "url") return "url";
+  if (type === "image" || type === "file") return "files";
+  if (type === "select" || type === "radio") return "select";
+  return "text";
+}
+
+function parseFormFieldOptions(optionsRaw: string): string[] {
+  return optionsRaw
+    .split(",")
+    .map((option) => option.trim())
+    .filter(Boolean);
+}
+
+function getComponentChildren(component: any): any[] {
+  const childrenCollection = component?.components?.();
+  if (!childrenCollection) return [];
+  if (Array.isArray(childrenCollection)) return childrenCollection;
+  if (typeof childrenCollection.toArray === "function") return childrenCollection.toArray();
+  if (Array.isArray(childrenCollection.models)) return childrenCollection.models;
+  return [];
+}
+
+function getComponentTextContent(component: any): string {
+  const directContent = component?.get?.("content");
+  if (typeof directContent === "string" && directContent.trim()) {
+    return directContent.trim();
+  }
+
+  const html = String(component?.toHTML?.() || "");
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function mapInputTypeToFormFieldType(inputType: string): FormFieldType {
+  const normalized = inputType.toLowerCase();
+  if (normalized === "email") return "email";
+  if (normalized === "password") return "password";
+  if (normalized === "number") return "number";
+  if (normalized === "tel") return "tel";
+  if (normalized === "url") return "url";
+  if (normalized === "date") return "date";
+  if (normalized === "search") return "search";
+  if (normalized === "radio") return "radio";
+  if (normalized === "range") return "range";
+  if (normalized === "datetime-local") return "datetime-local";
+  if (normalized === "file") return "file";
+  if (normalized === "checkbox") return "checkbox";
+  return "text";
+}
+
+function extractSelectOptions(component: any): string[] {
+  const options: string[] = [];
+
+  const walk = (node: any) => {
+    const tag = String(node?.get?.("tagName") || "").toLowerCase();
+    if (tag === "option") {
+      const attrs = (node?.getAttributes?.() || {}) as Record<string, unknown>;
+      const value = String(attrs.value || "").trim();
+      const fallbackLabel = getComponentTextContent(node);
+      const next = value || fallbackLabel;
+      if (next) {
+        options.push(next);
+      }
+      return;
+    }
+
+    getComponentChildren(node).forEach((child) => walk(child));
+  };
+
+  getComponentChildren(component).forEach((child) => walk(child));
+
+  const unique = new Set<string>();
+  options.forEach((option) => {
+    const key = option.trim();
+    if (key) {
+      unique.add(key);
+    }
+  });
+  return Array.from(unique);
+}
+
+function finalizeDatabaseProperties(properties: FormDatabasePropertyPayload[]): FormDatabasePropertyPayload[] {
+  const result: FormDatabasePropertyPayload[] = [];
+  const seen = new Set<string>();
+
+  const pushProperty = (property: FormDatabasePropertyPayload) => {
+    const lookup = normalizeDatabasePropertyLookupKey(property.name);
+    if (!lookup || seen.has(lookup)) return;
+    seen.add(lookup);
+    result.push(property);
+  };
+
+  properties.forEach((property) => pushProperty(property));
+  pushProperty({ name: "ID", type: "text" });
+  pushProperty({ name: "Date Created", type: "date" });
+
+  return result;
+}
+
+function buildDatabasePropertiesFromFormFields(fields: FormField[]): FormDatabasePropertyPayload[] {
+  const result: FormDatabasePropertyPayload[] = [];
+
+  fields.forEach((field, index) => {
+    const fallbackName = `field_${index + 1}`;
+    const candidateName = normalizeFormFieldName(field.name || field.label || fallbackName) || fallbackName;
+    const propertyType = mapFormFieldTypeToDatabasePropertyType(field.type);
+    const propertyPayload: FormDatabasePropertyPayload = {
+      name: candidateName,
+      type: propertyType,
+    };
+
+    if (propertyType === "select") {
+      propertyPayload.options = parseFormFieldOptions(field.options);
+    }
+
+    result.push(propertyPayload);
+  });
+
+  return finalizeDatabaseProperties(result);
+}
+
+function buildDatabasePropertiesFromFormComponent(formComponent: any): FormDatabasePropertyPayload[] {
+  const result: FormDatabasePropertyPayload[] = [];
+  let fallbackIndex = 1;
+
+  const walk = (node: any) => {
+    const tag = String(node?.get?.("tagName") || "").toLowerCase();
+    const attrs = (node?.getAttributes?.() || {}) as Record<string, unknown>;
+
+    const isInput = tag === "input";
+    const isSelect = tag === "select";
+    const isTextarea = tag === "textarea";
+
+    if (isInput || isSelect || isTextarea) {
+      const inputType = isInput ? String(attrs.type || "text") : (isSelect ? "select" : "textarea");
+      const normalizedInputType = inputType.toLowerCase();
+
+      if (!["submit", "button", "reset", "hidden"].includes(normalizedInputType)) {
+        const candidateBaseName = String(attrs.name || attrs.id || attrs["aria-label"] || attrs.placeholder || "").trim();
+        const fallbackName = `field_${fallbackIndex++}`;
+        const normalizedName = normalizeFormFieldName(candidateBaseName || fallbackName) || fallbackName;
+        const fieldType = isSelect ? "select" : (isTextarea ? "textarea" : mapInputTypeToFormFieldType(normalizedInputType));
+        const propertyType = mapFormFieldTypeToDatabasePropertyType(fieldType);
+        const payload: FormDatabasePropertyPayload = {
+          name: normalizedName,
+          type: propertyType,
+        };
+
+        if (propertyType === "select") {
+          const optionValues = isSelect
+            ? extractSelectOptions(node)
+            : parseFormFieldOptions(String(attrs["data-options"] || ""));
+          if (optionValues.length) {
+            payload.options = optionValues;
+          }
+        }
+
+        result.push(payload);
+      }
+    }
+
+    getComponentChildren(node).forEach((child) => walk(child));
+  };
+
+  walk(formComponent);
+
+  return finalizeDatabaseProperties(result);
 }
 
 function getBlockId(block: any): string {
@@ -421,6 +648,7 @@ export default function GrapesEditor({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const floatingInspectorRef = useRef<HTMLDivElement | null>(null);
+  const workflowDrawerFrameRef = useRef<HTMLIFrameElement | null>(null);
   const editorRef = useRef<any>(null);
   const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localBackupRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -439,6 +667,8 @@ export default function GrapesEditor({
   const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
   const [savedSnippets, setSavedSnippets] = useState<SavedSnippet[]>([]);
   const [selectedPageSlug, setSelectedPageSlug] = useState("");
+  const [newPageName, setNewPageName] = useState("");
+  const [isCreatingPage, setIsCreatingPage] = useState(false);
   const [leftPanelMode, setLeftPanelMode] = useState<"builder" | "responsive">("builder");
   const [elementSearch, setElementSearch] = useState("");
   const [assetSearch, setAssetSearch] = useState("");
@@ -461,6 +691,17 @@ export default function GrapesEditor({
   const [isRenamingWorkflow, setIsRenamingWorkflow] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState("");
   const [isRunsPanelCollapsed, setIsRunsPanelCollapsed] = useState(false);
+  const [isWorkflowSidebarSettingsCollapsed, setIsWorkflowSidebarSettingsCollapsed] = useState(false);
+  const [workflowSidebarState, setWorkflowSidebarState] = useState<WorkflowSidebarBridgeState>({
+    selectedNodeId: "",
+    selectedNodeLabel: "",
+    selectedNodeType: "",
+    selectedNodeConfig: {},
+    selectedEdgeId: "",
+    selectedEdgeBranch: "always",
+    databaseOptions: [],
+    isDatabaseOptionsLoading: false,
+  });
   const [formSubmitLabel, setFormSubmitLabel] = useState("Submit");
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [showFloatingInspector, setShowFloatingInspector] = useState(false);
@@ -499,6 +740,18 @@ export default function GrapesEditor({
 
   const databasePreviewColumns = useMemo(() => {
     const keys = new Set<string>();
+
+    formFields.forEach((field, index) => {
+      const fallbackName = `field_${index + 1}`;
+      const fieldName = normalizeFormFieldName(field.name || field.label || fallbackName);
+      if (fieldName) {
+        keys.add(fieldName);
+      }
+    });
+
+    keys.add("id");
+    keys.add("dateCreated");
+
     databasePreviewRows.forEach((row) => {
       const values = row.values || {};
       Object.keys(values).forEach((key) => {
@@ -508,11 +761,11 @@ export default function GrapesEditor({
       });
     });
 
-    const preferredOrder = ["title", "name", "email", "description", "message", "Status"];
+    const preferredOrder = ["id", "dateCreated", "title", "name", "email", "description", "message", "Status"];
     const orderedPreferred = preferredOrder.filter((key) => keys.has(key));
     const orderedRest = Array.from(keys).filter((key) => !preferredOrder.includes(key));
-    return [...orderedPreferred, ...orderedRest].slice(0, 6);
-  }, [databasePreviewRows]);
+    return [...orderedPreferred, ...orderedRest].slice(0, 8);
+  }, [databasePreviewRows, formFields]);
 
   const syncUndoState = useCallback(() => {
     const editor = editorRef.current;
@@ -835,6 +1088,164 @@ export default function GrapesEditor({
     return true;
   }, [appId, appProjectId, findNearestWorkflowBindableComponent]);
 
+  const getSelectedBindingPropertyPayloads = useCallback((): FormDatabasePropertyPayload[] => {
+    const fallback = buildDatabasePropertiesFromFormFields(formFields);
+    const editor = editorRef.current;
+    if (!editor) {
+      return fallback;
+    }
+
+    const selected = editor.getSelected?.();
+    const bindable = findNearestWorkflowBindableComponent(selected);
+    if (!bindable) {
+      return fallback;
+    }
+
+    const tag = String(bindable?.get?.("tagName") || "").toLowerCase();
+    if (tag !== "form") {
+      return fallback;
+    }
+
+    const extracted = buildDatabasePropertiesFromFormComponent(bindable);
+    if (extracted.length <= 2) {
+      return fallback;
+    }
+
+    return extracted;
+  }, [findNearestWorkflowBindableComponent, formFields]);
+
+  const ensureDatabaseProperties = useCallback(async (
+    databaseId: string,
+    propertyPayloads: FormDatabasePropertyPayload[]
+  ): Promise<PropertySyncResult> => {
+    const result: PropertySyncResult = {
+      createdCount: 0,
+      skippedCount: 0,
+      failedProperties: [],
+      totalCandidates: propertyPayloads.length,
+    };
+
+    if (!databaseId || !propertyPayloads.length) {
+      return result;
+    }
+
+    try {
+      const existingRes = await fetch(`/api/properties?databaseId=${databaseId}`, { cache: "no-store" });
+      if (!existingRes.ok) {
+        result.failedProperties = propertyPayloads.map((payload) => payload.name);
+        return result;
+      }
+
+      const existingData = await existingRes.json();
+      const existingNameKeys = new Set<string>();
+      (Array.isArray(existingData) ? existingData : []).forEach((property: any) => {
+        const key = normalizeDatabasePropertyLookupKey(String(property?.name || ""));
+        if (key) {
+          existingNameKeys.add(key);
+        }
+      });
+
+      for (const payload of propertyPayloads) {
+        const lookupKey = normalizeDatabasePropertyLookupKey(payload.name);
+        if (lookupKey && existingNameKeys.has(lookupKey)) {
+          result.skippedCount += 1;
+          continue;
+        }
+
+        try {
+          const createRes = await fetch("/api/properties", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              databaseId,
+              name: payload.name,
+              type: payload.type,
+              options: payload.options || [],
+            }),
+          });
+
+          if (createRes.ok) {
+            result.createdCount += 1;
+            if (lookupKey) {
+              existingNameKeys.add(lookupKey);
+            }
+          } else {
+            result.failedProperties.push(payload.name);
+          }
+        } catch {
+          result.failedProperties.push(payload.name);
+        }
+      }
+
+      return result;
+    } catch {
+      result.failedProperties = propertyPayloads.map((payload) => payload.name);
+      return result;
+    }
+  }, []);
+
+  const linkSelectedBindingToDatabase = useCallback(async (databaseId: string, projectIdOverride?: string) => {
+    const applied = applyDatabaseBindingToSelectedBinding(databaseId, projectIdOverride);
+    if (!applied) {
+      setStatus("Select a form, workflow scope, or submit trigger");
+      return;
+    }
+
+    if (!databaseId) {
+      setStatus("Database binding cleared from selected form element");
+      return;
+    }
+
+    let convertedToTable = false;
+    const selectedDatabase = workspaceDatabases.find((db) => db._id === databaseId);
+    if (selectedDatabase && selectedDatabase.viewType !== "table") {
+      try {
+        const convertRes = await fetch(`/api/databases/${databaseId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ viewType: "table" }),
+        });
+
+        if (convertRes.ok) {
+          convertedToTable = true;
+          setWorkspaceDatabases((prev) => prev.map((db) => (
+            db._id === databaseId ? { ...db, viewType: "table" } : db
+          )));
+        }
+      } catch {
+        // Continue syncing fields even if view conversion fails.
+      }
+    }
+
+    const propertyPayloads = getSelectedBindingPropertyPayloads();
+    const syncResult = await ensureDatabaseProperties(databaseId, propertyPayloads);
+
+    const summaryParts: string[] = [];
+    if (convertedToTable) {
+      summaryParts.push("converted view to table");
+    }
+    if (syncResult.createdCount > 0) {
+      summaryParts.push(`created ${syncResult.createdCount} missing fields`);
+    }
+    if (syncResult.skippedCount > 0) {
+      summaryParts.push(`${syncResult.skippedCount} already existed`);
+    }
+    if (syncResult.failedProperties.length > 0) {
+      summaryParts.push(`failed ${syncResult.failedProperties.slice(0, 3).join(", ")}`);
+    }
+
+    if (summaryParts.length) {
+      setStatus(`Database linked. Field sync: ${summaryParts.join("; ")}.`);
+    } else {
+      setStatus("Database linked. No fields found to sync.");
+    }
+  }, [
+    applyDatabaseBindingToSelectedBinding,
+    ensureDatabaseProperties,
+    getSelectedBindingPropertyPayloads,
+    workspaceDatabases,
+  ]);
+
   const renderBlockPanels = useCallback((searchQuery: string) => {
     const editor = editorRef.current;
     const visualContainer = document.getElementById("gjs-blocks");
@@ -901,6 +1312,67 @@ export default function GrapesEditor({
     }
     setStatus(`Linked to /p/${slug}`);
   }, []);
+
+  const createPageFromBuilder = useCallback(async () => {
+    if (!appId) {
+      setStatus("Save page/app first to create a new page");
+      return;
+    }
+
+    const pageNameInput = String(newPageName || "").trim();
+    const nextName = pageNameInput || `${pageName || "Page"} Copy`;
+
+    try {
+      setIsCreatingPage(true);
+      const res = await fetch("/api/nocode/pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appId, name: nextName }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to create page (${res.status})`);
+      }
+
+      const json = await res.json();
+      const created = json?.data;
+      const createdId = String(created?._id || "");
+      const createdSlug = String(created?.slug || "");
+      const createdName = String(created?.name || nextName);
+
+      if (!createdId || !createdSlug) {
+        throw new Error("Missing page id/slug in response");
+      }
+
+      setAppPages((prev) => {
+        const next = [{ _id: createdId, name: createdName, slug: createdSlug }, ...prev];
+        const seen = new Set<string>();
+        return next.filter((item) => {
+          if (!item._id || !item.slug || seen.has(item._id)) return false;
+          seen.add(item._id);
+          return true;
+        });
+      });
+
+      setSelectedPageSlug(createdSlug);
+      setNewPageName("");
+      setStatus(`Created page ${createdName}`);
+    } catch {
+      setStatus("Failed to create page");
+    } finally {
+      setIsCreatingPage(false);
+    }
+  }, [appId, newPageName, pageName]);
+
+  const openSelectedBuilderPage = useCallback(() => {
+    const selected = appPages.find((page) => page.slug === selectedPageSlug);
+    if (!selected?._id) {
+      setStatus("Select a page first");
+      return;
+    }
+
+    window.open(`/nocode/builder/${selected._id}`, "_blank", "noopener,noreferrer");
+  }, [appPages, selectedPageSlug]);
 
   const createWorkflowFromBuilder = useCallback(async () => {
     if (!appId) {
@@ -992,7 +1464,7 @@ export default function GrapesEditor({
           projectId: appProjectId,
           name: String(newDatabaseName || "Form Submissions"),
           icon: "🧾",
-          viewType: "board",
+          viewType: "table",
           templateName: "blank",
         }),
       });
@@ -1007,6 +1479,9 @@ export default function GrapesEditor({
         throw new Error("Database id missing in create response");
       }
 
+      const propertyPayloads = getSelectedBindingPropertyPayloads();
+      const syncResult = await ensureDatabaseProperties(createdId, propertyPayloads);
+
       setWorkspaceDatabases((prev) => {
         const exists = prev.some((db) => db._id === createdId);
         if (exists) return prev;
@@ -1014,7 +1489,7 @@ export default function GrapesEditor({
           {
             _id: createdId,
             name: String(created?.name || newDatabaseName || "Form Submissions"),
-            viewType: String(created?.viewType || "board"),
+            viewType: String(created?.viewType || "table"),
           },
           ...prev,
         ];
@@ -1022,17 +1497,31 @@ export default function GrapesEditor({
 
       setFormDatabaseId(createdId);
       const applied = applyDatabaseBindingToSelectedBinding(createdId, appProjectId);
-      if (!applied) {
-        setStatus("Table created. Select a form or workflow scope to bind it.");
+      const baseMessage = applied
+        ? "Table created and bound to selected form element"
+        : "Table created. Select a form or workflow scope to bind it.";
+
+      if (syncResult.failedProperties.length) {
+        setStatus(`${baseMessage} Some columns failed: ${syncResult.failedProperties.join(", ")}`);
+      } else if (syncResult.createdCount) {
+        setStatus(`${baseMessage} Added ${syncResult.createdCount} columns from form fields.`);
       } else {
-        setStatus("Table created and bound to selected form element");
+        setStatus(baseMessage);
       }
+
+      setDatabasePreviewRows([]);
     } catch {
       setStatus("Failed to create table");
     } finally {
       setIsCreatingFormDatabase(false);
     }
-  }, [appProjectId, applyDatabaseBindingToSelectedBinding, newDatabaseName]);
+  }, [
+    appProjectId,
+    applyDatabaseBindingToSelectedBinding,
+    ensureDatabaseProperties,
+    getSelectedBindingPropertyPayloads,
+    newDatabaseName,
+  ]);
 
   const fetchDatabasePreviewRows = useCallback(async () => {
     if (!formDatabaseId) {
@@ -1042,7 +1531,7 @@ export default function GrapesEditor({
 
     try {
       setIsDatabasePreviewLoading(true);
-      const res = await fetch(`/api/board_items?databaseId=${formDatabaseId}`, { cache: "no-store" });
+      const res = await fetch(`/api/items?databaseId=${formDatabaseId}`, { cache: "no-store" });
       if (!res.ok) {
         setDatabasePreviewRows([]);
         return;
@@ -1053,7 +1542,11 @@ export default function GrapesEditor({
         .slice(0, 10)
         .map((item: any) => ({
           _id: String(item?._id || ""),
-          values: item?.values && typeof item.values === "object" ? item.values : {},
+          values: {
+            ...(item?.values && typeof item.values === "object" ? item.values : {}),
+            id: item?._id ? String(item._id) : "",
+            dateCreated: item?.createdAt ? String(item.createdAt) : "",
+          },
           createdAt: item?.createdAt ? String(item.createdAt) : "",
         }));
 
@@ -1141,7 +1634,7 @@ export default function GrapesEditor({
       return `<label style=\"display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;\">${label}<input type=\"${field.type}\" name=\"${field.name}\"${placeholderAttr}${requiredAttr}${minAttr}${maxAttr} style=\"padding:10px;border:1px solid #cbd5e1;border-radius:8px;\" /></label>`;
     }).join("");
 
-    return `<form data-workflow-key=\"${formWorkflowKey}\" data-app-id=\"${appId || ""}\" data-project-id=\"${appProjectId || ""}\" data-database-id=\"${formDatabaseId || ""}\" data-workflow-alert=\"true\" style=\"display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;\">${fieldsHtml}<button type=\"submit\" style=\"padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;\">${formSubmitLabel || "Submit"}</button></form>`;
+    return `<form data-workflow-key=\"${formWorkflowKey}\" data-app-id=\"${appId || ""}\" data-project-id=\"${appProjectId || ""}\" data-database-id=\"${formDatabaseId || ""}\" data-workflow-alert=\"true\" data-workflow-redirect=\"\" style=\"display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;\">${fieldsHtml}<button type=\"submit\" style=\"padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;\">${formSubmitLabel || "Submit"}</button></form>`;
   }, [appId, appProjectId, formDatabaseId, formFields, formSubmitLabel, formWorkflowKey]);
 
   const insertBuiltForm = useCallback(() => {
@@ -1227,6 +1720,93 @@ export default function GrapesEditor({
   const selectedRun = useMemo(() => {
     return workflowRuns.find((run) => run._id === selectedRunId) || workflowRuns[0] || null;
   }, [selectedRunId, workflowRuns]);
+
+  const postWorkflowSidebarMessage = useCallback((type: string, payload: Record<string, unknown>) => {
+    const frameWindow = workflowDrawerFrameRef.current?.contentWindow;
+    if (!frameWindow) return;
+
+    frameWindow.postMessage(
+      {
+        source: "workflow-sidebar",
+        type,
+        payload,
+      },
+      window.location.origin
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!showWorkflowDrawer) return;
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+
+      const frameWindow = workflowDrawerFrameRef.current?.contentWindow;
+      if (!frameWindow || event.source !== frameWindow) return;
+
+      const message = event.data as {
+        source?: string;
+        type?: string;
+        payload?: Record<string, any>;
+      };
+
+      if (!message || message.source !== "workflow-editor" || message.type !== "state") {
+        return;
+      }
+
+      const payload = message.payload || {};
+      const selectedNode = payload.selectedNode || null;
+      const selectedEdge = payload.selectedEdge || null;
+      const branchRaw = String(selectedEdge?.branch || "always");
+      const selectedEdgeBranch: WorkflowBranchValue = ["always", "true", "false"].includes(branchRaw)
+        ? (branchRaw as WorkflowBranchValue)
+        : "always";
+
+      const databaseOptionsRaw = Array.isArray(payload.databaseOptions) ? payload.databaseOptions : [];
+      const databaseOptions = databaseOptionsRaw
+        .map((item: any) => ({
+          _id: String(item?._id || ""),
+          name: String(item?.name || "Untitled table"),
+        }))
+        .filter((item: { _id: string; name: string }) => item._id);
+
+      const nodeConfig = selectedNode?.config && typeof selectedNode.config === "object"
+        ? (selectedNode.config as Record<string, unknown>)
+        : {};
+
+      setWorkflowSidebarState({
+        selectedNodeId: String(selectedNode?.id || ""),
+        selectedNodeLabel: String(selectedNode?.label || ""),
+        selectedNodeType: String(selectedNode?.type || ""),
+        selectedNodeConfig: nodeConfig,
+        selectedEdgeId: String(selectedEdge?.id || ""),
+        selectedEdgeBranch,
+        databaseOptions,
+        isDatabaseOptionsLoading: Boolean(payload.isDatabaseOptionsLoading),
+      });
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, [showWorkflowDrawer]);
+
+  useEffect(() => {
+    if (showWorkflowDrawer) return;
+
+    setWorkflowSidebarState({
+      selectedNodeId: "",
+      selectedNodeLabel: "",
+      selectedNodeType: "",
+      selectedNodeConfig: {},
+      selectedEdgeId: "",
+      selectedEdgeBranch: "always",
+      databaseOptions: [],
+      isDatabaseOptionsLoading: false,
+    });
+    setIsWorkflowSidebarSettingsCollapsed(false);
+  }, [showWorkflowDrawer]);
 
   const fetchWorkflowRuns = useCallback(async () => {
     if (!appId) return;
@@ -1644,7 +2224,7 @@ export default function GrapesEditor({
     editor.BlockManager.add("visual-form", {
       label: visualLabel("F", "Form"),
       content:
-        `<form data-workflow-key="" data-app-id="${appId || ""}" data-project-id="" data-database-id="" data-workflow-alert="true" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
+        `<form data-workflow-key="" data-app-id="${appId || ""}" data-project-id="" data-database-id="" data-workflow-alert="true" data-workflow-redirect="" style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #cbd5e1;border-radius:12px;"><input name="email" type="email" placeholder="Email" required style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;"/><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;">Submit</button></form>`,
     });
 
     editor.BlockManager.add("container-group", {
@@ -1690,14 +2270,35 @@ export default function GrapesEditor({
       label: visualLabel("WS", "Workflow Scope"),
       category: inputFormsCategory,
       attributes: inputFormBlockAttributes,
-      content: `<section data-workflow-scope="true" data-workflow-key="" data-app-id="${appId || ""}" data-project-id="" data-database-id="" data-workflow-alert="true" style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;"><h4 style="margin:0;color:#0f172a;">Workflow Scope</h4><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Email<input type="email" name="email" data-field-key="email" placeholder="name@example.com" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><button type="button" data-workflow-submit="true" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Submit Workflow</button></section>`,
+      content: `<section data-workflow-scope="true" data-workflow-key="" data-app-id="${appId || ""}" data-project-id="" data-database-id="" data-workflow-alert="true" data-workflow-redirect="" style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;"><h4 style="margin:0;color:#0f172a;">Workflow Scope</h4><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Email<input type="email" name="email" data-field-key="email" placeholder="name@example.com" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><button type="button" data-workflow-submit="true" data-workflow-redirect="" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Submit Workflow</button></section>`,
     });
 
     editor.BlockManager.add("input-form-submit", {
       label: visualLabel("SB", "Submit Workflow"),
       category: inputFormsCategory,
       attributes: inputFormBlockAttributes,
-      content: '<button type="button" data-workflow-submit="true" data-workflow-key="" data-app-id="" data-project-id="" data-database-id="" data-workflow-alert="true" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Submit Workflow</button>',
+      content: '<button type="button" data-workflow-submit="true" data-workflow-key="" data-app-id="" data-project-id="" data-database-id="" data-workflow-alert="true" data-workflow-redirect="" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Submit Workflow</button>',
+    });
+
+    editor.BlockManager.add("input-form-auth-login", {
+      label: visualLabel("AL", "Auth Login"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<form data-auth-form="login" data-auth-endpoint="/api/public/auth/login" data-auth-redirect="" data-auth-alert="true" style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;"><h4 style="margin:0;color:#0f172a;">Login</h4><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Email<input type="email" name="email" placeholder="name@example.com" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Password<input type="password" name="password" placeholder="Password" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Sign In</button></form>',
+    });
+
+    editor.BlockManager.add("input-form-auth-signup", {
+      label: visualLabel("AS", "Auth Signup"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<form data-auth-form="signup" data-auth-endpoint="/api/public/auth/signup" data-auth-redirect="" data-auth-alert="true" style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;"><h4 style="margin:0;color:#0f172a;">Sign Up</h4><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Full Name<input type="text" name="name" placeholder="Your name" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Email<input type="email" name="email" placeholder="name@example.com" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Password<input type="password" name="password" placeholder="Create password" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-weight:700;cursor:pointer;">Create Account</button></form>',
+    });
+
+    editor.BlockManager.add("input-form-auth-verify-otp", {
+      label: visualLabel("AO", "Auth Verify OTP"),
+      category: inputFormsCategory,
+      attributes: inputFormBlockAttributes,
+      content: '<form data-auth-form="verify-otp" data-auth-endpoint="/api/public/auth/verify-otp" data-auth-redirect="" data-auth-alert="true" style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#ffffff;"><h4 style="margin:0;color:#0f172a;">Verify OTP</h4><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">Email<input type="email" name="email" placeholder="name@example.com" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><label style="display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1e293b;">OTP Code<input type="text" name="otp" inputmode="numeric" placeholder="Enter 6-digit code" required style="padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;"/></label><button type="submit" style="padding:10px 14px;border:none;border-radius:8px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Verify Account</button></form>',
     });
 
     editor.BlockManager.add("input-form-text", {
@@ -2020,6 +2621,19 @@ export default function GrapesEditor({
   }, [appId]);
 
   useEffect(() => {
+    if (selectedPageSlug) return;
+
+    if (pageSlug && appPages.some((item) => item.slug === pageSlug)) {
+      setSelectedPageSlug(pageSlug);
+      return;
+    }
+
+    if (appPages.length > 0) {
+      setSelectedPageSlug(appPages[0].slug);
+    }
+  }, [appPages, pageSlug, selectedPageSlug]);
+
+  useEffect(() => {
     if (!appProjectId) {
       setWorkspaceDatabases([]);
       return;
@@ -2201,7 +2815,7 @@ export default function GrapesEditor({
                   onClick={() => setIsRunsPanelCollapsed((value) => !value)}
                   type="button"
                 >
-                  {isRunsPanelCollapsed ? "Show Runs" : "Hide Runs"}
+                  {isRunsPanelCollapsed ? "Show Sidebar" : "Hide Sidebar"}
                 </button>
                 {workflowDrawerId ? (
                   <a
@@ -2225,31 +2839,217 @@ export default function GrapesEditor({
 
             <div className="nocode-workflow-drawer-body">
               {workflowDrawerId ? (
-                <div className={`nocode-workflow-drawer-split ${isRunsPanelCollapsed ? "runs-collapsed" : ""}`}>
+                <div className={`nocode-workflow-drawer-split ${isRunsPanelCollapsed ? "sidebar-collapsed" : ""}`}>
                   <div className="nocode-workflow-drawer-editor">
                     <iframe
+                      ref={workflowDrawerFrameRef}
                       key={workflowDrawerId}
-                      src={`/nocode/workflows/${workflowDrawerId}?embed=1`}
+                      src={`/nocode/workflows/${workflowDrawerId}?embed=1&externalSidebar=1`}
                       className="nocode-workflow-drawer-frame"
                       title="Workflow editor"
                     />
-                  </div>
 
-                  <aside className={`nocode-workflow-runs-panel ${isRunsPanelCollapsed ? "collapsed" : ""}`}>
                     {isRunsPanelCollapsed ? (
                       <button
-                        className="nocode-workflow-runs-collapse-rail"
+                        className="nocode-workflow-sidebar-expand-btn"
                         onClick={() => setIsRunsPanelCollapsed(false)}
                         type="button"
-                        aria-label="Show runs panel"
-                        title="Show runs panel"
+                        aria-label="Show workflow sidebar"
+                        title="Show workflow sidebar"
                       >
-                        Runs
+                        Show Sidebar
                       </button>
                     ) : null}
+                  </div>
 
-                    {!isRunsPanelCollapsed ? (
-                      <>
+                  {!isRunsPanelCollapsed ? (
+                    <aside className="nocode-workflow-runs-panel">
+                        <div className="nocode-workflow-sidebar-settings">
+                          <div className="nocode-workflow-runs-head nocode-workflow-settings-head">
+                            <strong>Node Settings</strong>
+                            <button
+                              className="nocode-btn nocode-btn-secondary"
+                              type="button"
+                              onClick={() => setIsWorkflowSidebarSettingsCollapsed((value) => !value)}
+                            >
+                              {isWorkflowSidebarSettingsCollapsed ? "Show" : "Hide"}
+                            </button>
+                          </div>
+
+                          {!isWorkflowSidebarSettingsCollapsed ? (
+                            <div className="nocode-workflow-settings-body">
+                              <div className="nocode-workflow-item-meta">
+                                {workflowSidebarState.selectedNodeLabel || "Select a node"}
+                              </div>
+
+                              {workflowSidebarState.selectedNodeId ? (
+                                <>
+                                  {workflowSidebarState.selectedNodeType === "trigger.webhook" ? (
+                                    <label className="nocode-workflow-settings-field">
+                                      <span>Webhook secret</span>
+                                      <input
+                                        value={String(workflowSidebarState.selectedNodeConfig.secret || "")}
+                                        onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                          nodeId: workflowSidebarState.selectedNodeId,
+                                          key: "secret",
+                                          value: event.target.value,
+                                        })}
+                                        className="nocode-workflow-settings-input"
+                                        placeholder="x-workflow-secret"
+                                      />
+                                    </label>
+                                  ) : null}
+
+                                  {workflowSidebarState.selectedNodeType === "trigger.schedule" ? (
+                                    <label className="nocode-workflow-settings-field">
+                                      <span>Cron</span>
+                                      <input
+                                        value={String(workflowSidebarState.selectedNodeConfig.cron || "")}
+                                        onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                          nodeId: workflowSidebarState.selectedNodeId,
+                                          key: "cron",
+                                          value: event.target.value,
+                                        })}
+                                        className="nocode-workflow-settings-input"
+                                        placeholder="*/5 * * * *"
+                                      />
+                                    </label>
+                                  ) : null}
+
+                                  {workflowSidebarState.selectedNodeType === "action.webhook" ? (
+                                    <label className="nocode-workflow-settings-field">
+                                      <span>Webhook URL</span>
+                                      <input
+                                        value={String(workflowSidebarState.selectedNodeConfig.url || "")}
+                                        onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                          nodeId: workflowSidebarState.selectedNodeId,
+                                          key: "url",
+                                          value: event.target.value,
+                                        })}
+                                        className="nocode-workflow-settings-input"
+                                        placeholder="https://example.com/webhook"
+                                      />
+                                    </label>
+                                  ) : null}
+
+                                  {workflowSidebarState.selectedNodeType === "action.dbInsert" ? (
+                                    <>
+                                      <label className="nocode-workflow-settings-field">
+                                        <span>Select table</span>
+                                        <select
+                                          value={String(workflowSidebarState.selectedNodeConfig.databaseId || "")}
+                                          onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                            nodeId: workflowSidebarState.selectedNodeId,
+                                            key: "databaseId",
+                                            value: event.target.value,
+                                          })}
+                                          className="nocode-workflow-settings-input"
+                                        >
+                                          <option value="">
+                                            {workflowSidebarState.isDatabaseOptionsLoading ? "Loading tables..." : "Use form binding / app default table"}
+                                          </option>
+                                          {workflowSidebarState.databaseOptions.map((database) => (
+                                            <option key={database._id} value={database._id}>
+                                              {database.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+
+                                      {[
+                                        ["databaseId", "Database ID", "Optional: use form binding or app default table"],
+                                        ["titleField", "Title field key", "title"],
+                                        ["descriptionField", "Description field key", "description"],
+                                        ["emailField", "Email field key", "email"],
+                                        ["fromDateField", "From date field key", "fromDate"],
+                                        ["toDateField", "To date field key", "toDate"],
+                                        ["milestonesField", "Milestones field key", "milestones"],
+                                        ["statusValue", "Status value", "To Do"],
+                                      ].map(([key, label, placeholder]) => (
+                                        <label key={String(key)} className="nocode-workflow-settings-field">
+                                          <span>{String(label)}</span>
+                                          <input
+                                            value={String(workflowSidebarState.selectedNodeConfig[String(key)] || "")}
+                                            onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                              nodeId: workflowSidebarState.selectedNodeId,
+                                              key: String(key),
+                                              value: event.target.value,
+                                            })}
+                                            className="nocode-workflow-settings-input"
+                                            placeholder={String(placeholder)}
+                                          />
+                                        </label>
+                                      ))}
+                                    </>
+                                  ) : null}
+
+                                  {["action.log", "action.alert"].includes(workflowSidebarState.selectedNodeType) ? (
+                                    <label className="nocode-workflow-settings-field">
+                                      <span>Message</span>
+                                      <input
+                                        value={String(workflowSidebarState.selectedNodeConfig.message || "")}
+                                        onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                          nodeId: workflowSidebarState.selectedNodeId,
+                                          key: "message",
+                                          value: event.target.value,
+                                        })}
+                                        className="nocode-workflow-settings-input"
+                                        placeholder="Workflow test alert"
+                                      />
+                                    </label>
+                                  ) : null}
+
+                                  {workflowSidebarState.selectedNodeType.startsWith("condition.") ? (
+                                    <label className="nocode-workflow-settings-field">
+                                      <span>Condition key</span>
+                                      <select
+                                        value={String(workflowSidebarState.selectedNodeConfig.key || "always")}
+                                        onChange={(event) => postWorkflowSidebarMessage("update-node-config", {
+                                          nodeId: workflowSidebarState.selectedNodeId,
+                                          key: "key",
+                                          value: event.target.value,
+                                        })}
+                                        className="nocode-workflow-settings-input"
+                                      >
+                                        <option value="always">always</option>
+                                        <option value="email">email</option>
+                                        <option value="hasEmail">hasEmail</option>
+                                      </select>
+                                    </label>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <p className="nocode-small-helper">Select any trigger, action, or condition node to edit its settings.</p>
+                              )}
+
+                              <div className="nocode-workflow-list-head">Edge Settings</div>
+                              <div className="nocode-workflow-item-meta">
+                                {workflowSidebarState.selectedEdgeId || "Select an edge"}
+                              </div>
+
+                              {workflowSidebarState.selectedEdgeId ? (
+                                <label className="nocode-workflow-settings-field">
+                                  <span>Branch</span>
+                                  <select
+                                    value={workflowSidebarState.selectedEdgeBranch}
+                                    onChange={(event) => postWorkflowSidebarMessage("update-edge-branch", {
+                                      edgeId: workflowSidebarState.selectedEdgeId,
+                                      branch: event.target.value,
+                                    })}
+                                    className="nocode-workflow-settings-input"
+                                  >
+                                    <option value="always">always</option>
+                                    <option value="true">true</option>
+                                    <option value="false">false</option>
+                                  </select>
+                                </label>
+                              ) : (
+                                <p className="nocode-small-helper">Select a connection line to edit branch behavior.</p>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+
                         <div className="nocode-workflow-runs-head">
                           <strong>Runs</strong>
                           <button
@@ -2324,9 +3124,8 @@ export default function GrapesEditor({
                             <p className="nocode-small-helper">Select a run to inspect details.</p>
                           )}
                         </div>
-                      </>
-                    ) : null}
-                  </aside>
+                    </aside>
+                  ) : null}
                 </div>
               ) : (
                 <p className="nocode-small-helper">Select or create a workflow first.</p>
@@ -2525,10 +3324,7 @@ export default function GrapesEditor({
                 onChange={(e) => {
                   const nextDatabaseId = e.target.value;
                   setFormDatabaseId(nextDatabaseId);
-                  const applied = applyDatabaseBindingToSelectedBinding(nextDatabaseId, appProjectId);
-                  if (!applied) {
-                    setStatus("Select a form, workflow scope, or submit trigger");
-                  }
+                  void linkSelectedBindingToDatabase(nextDatabaseId, appProjectId);
                 }}
                 disabled={!appProjectId}
               >
@@ -2539,6 +3335,17 @@ export default function GrapesEditor({
                   </option>
                 ))}
               </select>
+
+              <div className="nocode-form-builder-actions">
+                <button
+                  className="nocode-btn nocode-btn-secondary"
+                  type="button"
+                  disabled={!formDatabaseId}
+                  onClick={() => void linkSelectedBindingToDatabase(formDatabaseId, appProjectId)}
+                >
+                  Link Selected + Sync Missing Fields
+                </button>
+              </div>
 
               <div className="nocode-form-builder-actions">
                 <input
@@ -2758,6 +3565,28 @@ export default function GrapesEditor({
                   <option key={page._id} value={page.slug}>{page.name} ({page.slug})</option>
                 ))}
               </select>
+              <div className="nocode-form-builder-actions">
+                <input
+                  className="nocode-full-width"
+                  value={newPageName}
+                  onChange={(e) => setNewPageName(e.target.value)}
+                  placeholder="New page name"
+                />
+                <button
+                  className="nocode-btn nocode-btn-secondary nocode-full-width"
+                  onClick={() => void createPageFromBuilder()}
+                  disabled={!appId || isCreatingPage}
+                >
+                  {isCreatingPage ? "Creating..." : "Create Page"}
+                </button>
+              </div>
+              <button
+                className="nocode-btn nocode-btn-secondary nocode-full-width"
+                onClick={openSelectedBuilderPage}
+                disabled={!selectedPageSlug}
+              >
+                Open Selected Page Builder
+              </button>
               <button
                 className="nocode-btn nocode-btn-secondary nocode-full-width"
                 onClick={() => linkSelectedElement(selectedPageSlug)}
