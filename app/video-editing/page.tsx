@@ -187,8 +187,8 @@ export default function VideoEditingPage() {
           </div>
         </div>
 
-        <div className="h-[calc(100vh-57px)] overflow-hidden bg-slate-100 p-4 sm:p-6">
-          <div className="mx-auto h-full max-w-[1600px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/5">
+        <div className="min-h-[calc(100vh-57px)] overflow-y-auto bg-slate-100 p-4 sm:p-6">
+          <div className="mx-auto min-h-[calc(100vh-160px)] max-w-[1600px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/5">
             <VideoView databaseId={selectedVideo._id} />
           </div>
         </div>

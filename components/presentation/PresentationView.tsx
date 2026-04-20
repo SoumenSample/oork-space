@@ -8,6 +8,8 @@ import {
   ZoomIn, ZoomOut, RotateCcw, Save, Eye, EyeOff, Grid,
 } from "lucide-react";
 import jsPDF from "jspdf";
+import PptxGenJS from "pptxgenjs";
+
 
 interface TextBox {
   id: string;
@@ -79,6 +81,23 @@ const BG_PRESETS = [
   { label: "White",      value: "#ffffff" },
   { label: "Light",      value: "#f8fafc" },
 ];
+
+const Z_INDEX_LAYERS = {
+  image: 100,
+  shape: 200,
+  text: 300,
+} as const;
+
+function getNextLayerZ(items: Array<{ zIndex: number }>, base: number): number {
+  const maxInLayer = items.reduce((maxZ, item) => {
+    if (item.zIndex >= base && item.zIndex < base + 100) {
+      return Math.max(maxZ, item.zIndex);
+    }
+    return maxZ;
+  }, base - 1);
+
+  return maxInLayer + 1;
+}
 
 function makeSlide(overrides: Partial<Slide> = {}): Slide {
   return {
@@ -308,7 +327,7 @@ function makeTextBox(overrides: Partial<TextBox> = {}): TextBox {
     borderColor: "transparent",
     borderWidth: 0,
     opacity: 100,
-    zIndex: 1,
+    zIndex: 3,
     ...overrides,
   };
 }
@@ -344,6 +363,7 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
   const [fontFamily, setFontFamily] = useState("Arial");
   const [textColor, setTextColor] = useState("#ffffff");
   const [isDragging, setIsDragging] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isResizing, setIsResizing] = useState(false);
   const [resizeDir, setResizeDir] = useState("");
@@ -353,6 +373,7 @@ export default function PresentationView({ databaseId, templateName = "blank" }:
   const lastAppliedRemoteSnapshotRef = useRef<string>("");
   const [autoPlay, setAutoPlay] = useState(false);
 const [slideInterval, setSlideInterval] = useState(3000); // 3 sec
+const [showDownload, setShowDownload] = useState(false);
 // const [isResizing, setIsResizing] = useState(false);
 
   const slide = slides[currentIndex];
@@ -507,21 +528,33 @@ useEffect(() => {
   }, [databaseId, loadedOnce, editingId, isDragging, isResizing]);
 
   // ── Add elements ──
-  const addTextBox = () => {
-    const tb = makeTextBox({ x: 80, y: 80 + slides[currentIndex].textBoxes.length * 90, fontSize, fontFamily, color: textColor });
-    updateSlide(s => ({ ...s, textBoxes: [...s.textBoxes, tb] }));
-    setSelectedId(tb.id);
-    setEditingId(tb.id);
-    setActiveTool("select");
-  };
+  // const addTextBox = () => {
+  //   const tb = makeTextBox({ x: 80, y: 80 + slides[currentIndex].textBoxes.length * 90, fontSize, fontFamily, color: textColor });
+  //   updateSlide(s => ({ ...s, textBoxes: [...s.textBoxes, tb] }));
+  //   setSelectedId(tb.id);
+  //   setEditingId(tb.id);
+  //   setActiveTool("select");
+  // };
 
+  const addTextBox = () => {
+  const tb = makeTextBox({
+    x: 80,
+    y: 80,
+    fontSize,
+    fontFamily,
+    color: textColor,
+    zIndex: getNextLayerZ(slide.textBoxes, Z_INDEX_LAYERS.text),
+  });
+
+  updateSlide(s => ({ ...s, textBoxes: [...s.textBoxes, tb] }));
+};
   const addShape = () => {
     const sh: Shape = {
       id: Date.now().toString(),
       type: activeShape,
       x: 100, y: 100, width: 160, height: 100,
       fill: fillColorState, stroke: strokeColor,
-      strokeWidth: 2, opacity: 100, zIndex: 1,
+      strokeWidth: 2, opacity: 100, zIndex: getNextLayerZ(slide.shapes, Z_INDEX_LAYERS.shape),
     };
     updateSlide(s => ({ ...s, shapes: [...s.shapes, sh] }));
     setSelectedId(sh.id);
@@ -570,12 +603,23 @@ useEffect(() => {
     if (activeTool !== "select") return;
     e.stopPropagation();
     setSelectedId(id);
+    setDraggingId(id);
+     bringToFront(id);
     setIsDragging(true);
     const el = getElemById(id);
     if (!el) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setDragOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
+  const bringToFront = (id: string) => {
+  if (slide.textBoxes.some(t => t.id === id)) {
+    updateTextBox(id, { zIndex: getNextLayerZ(slide.textBoxes, Z_INDEX_LAYERS.text) });
+  } else if (slide.images.some(i => i.id === id)) {
+    updateImage(id, { zIndex: getNextLayerZ(slide.images, Z_INDEX_LAYERS.image) });
+  } else {
+    updateShape(id, { zIndex: getNextLayerZ(slide.shapes, Z_INDEX_LAYERS.shape) });
+  }
+};
 
   const getElemById = (id: string) =>
     slide.textBoxes.find(t => t.id === id) ||
@@ -594,7 +638,8 @@ useEffect(() => {
   //   else updateImage(selectedId, { x, y });
   // }, [isDragging, selectedId, dragOffset, slide]);
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-  if (!canvasRef.current || !selectedId) return;
+  const activeId = isDragging ? draggingId : selectedId;
+  if (!canvasRef.current || !activeId) return;
 
   const rect = canvasRef.current.getBoundingClientRect();
   const x = e.clientX - rect.left;
@@ -619,7 +664,7 @@ useEffect(() => {
   //   return;
   // }
   if (isResizing) {
-  const el = getElemById(selectedId);
+  const el = getElemById(activeId);
   if (!el) return;
 
   let newWidth = el.width;
@@ -654,7 +699,7 @@ useEffect(() => {
   newWidth = Math.max(50, newWidth);
   newHeight = Math.max(50, newHeight);
 
-  updateImage(selectedId, {
+  updateImage(activeId, {
     width: newWidth,
     height: newHeight,
     x: newX,
@@ -669,18 +714,22 @@ useEffect(() => {
     const newX = Math.max(0, x - dragOffset.x);
     const newY = Math.max(0, y - dragOffset.y);
 
-    const isImage = slide.images.some(i => i.id === selectedId);
-    const isShape = slide.shapes.some(s => s.id === selectedId);
-    const isText = slide.textBoxes.some(t => t.id === selectedId);
+    const isImage = slide.images.some(i => i.id === activeId);
+    const isShape = slide.shapes.some(s => s.id === activeId);
+    const isText = slide.textBoxes.some(t => t.id === activeId);
 
-    if (isImage) updateImage(selectedId, { x: newX, y: newY });
-    else if (isShape) updateShape(selectedId, { x: newX, y: newY });
-    else if (isText) updateTextBox(selectedId, { x: newX, y: newY });
+    if (isImage) updateImage(activeId, { x: newX, y: newY });
+    else if (isShape) updateShape(activeId, { x: newX, y: newY });
+    else if (isText) updateTextBox(activeId, { x: newX, y: newY });
   }
 
-}, [isDragging, isResizing, selectedId, dragOffset, slide]);
+}, [isDragging, isResizing, draggingId, selectedId, dragOffset, slide]);
 
-  const handleMouseUp = () => { setIsDragging(false); setIsResizing(false); };
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setDraggingId(null);
+  };
 
   // ── Add image from URL ──
   const addImageFromUrl = (url: string) => {
@@ -688,7 +737,7 @@ useEffect(() => {
       id: Date.now().toString(),
       src: url, x: 100, y: 100,
       width: 300, height: 200,
-      opacity: 100, zIndex: 1,
+      opacity: 100, zIndex: getNextLayerZ(slide.images, Z_INDEX_LAYERS.image),
     };
     updateSlide(s => ({ ...s, images: [...s.images, im] }));
     setSelectedId(im.id);
@@ -705,7 +754,21 @@ useEffect(() => {
   };
 
   // ── Download JSON ──
-  const downloadPresentation = async () => {
+//   const downloadPresentation = async () => {
+//   const pdf = new jsPDF("landscape", "px", [800, 500]);
+
+//   for (let i = 0; i < slides.length; i++) {
+//     const canvas = await drawSlideToCanvas(slides[i]);
+//     const imgData = canvas.toDataURL("image/png");
+
+//     if (i > 0) pdf.addPage();
+
+//     pdf.addImage(imgData, "PNG", 0, 0, 800, 500);
+//   }
+
+//   pdf.save("presentation.pdf");
+// };
+const downloadPDF = async () => {
   const pdf = new jsPDF("landscape", "px", [800, 500]);
 
   for (let i = 0; i < slides.length; i++) {
@@ -713,11 +776,31 @@ useEffect(() => {
     const imgData = canvas.toDataURL("image/png");
 
     if (i > 0) pdf.addPage();
-
     pdf.addImage(imgData, "PNG", 0, 0, 800, 500);
   }
 
   pdf.save("presentation.pdf");
+};
+
+const downloadPPT = async () => {
+  const pptx = new PptxGenJS();
+
+  for (let i = 0; i < slides.length; i++) {
+    const slideCanvas = await drawSlideToCanvas(slides[i]);
+    const imgData = slideCanvas.toDataURL("image/png");
+
+    const slidePpt = pptx.addSlide();
+
+    slidePpt.addImage({
+      data: imgData,
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 5.6,
+    });
+  }
+
+  pptx.writeFile({ fileName: "presentation.pptx" });
 };
 
   const handleImageUpload = (file: File) => {
@@ -732,7 +815,7 @@ useEffect(() => {
       width: 300,
       height: 200,
       opacity: 100,
-      zIndex: 1,
+      zIndex: getNextLayerZ(slide.images, Z_INDEX_LAYERS.image),
     };
 
     updateSlide(s => ({ ...s, images: [...s.images, im] }));
@@ -858,9 +941,41 @@ useEffect(() => {
             <button onClick={()=>saveToDb(slides)} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition" title="Save">
               <Save size={14}/>
             </button>
-            <button onClick={downloadPresentation} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition" title="Download JSON">
+            {/* <button onClick={downloadPresentation} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition" title="Download JSON">
               <Download size={14}/>
-            </button>
+            </button> */}
+            <div className="relative">
+  <button
+    onClick={() => setShowDownload(!showDownload)}
+    className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition"
+  >
+    <Download size={14}/>
+  </button>
+
+  {showDownload && (
+    <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50">
+      <button
+        onClick={() => {
+          downloadPDF();
+          setShowDownload(false);
+        }}
+        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700"
+      >
+        Download PDF
+      </button>
+
+      <button
+        onClick={() => {
+          downloadPPT();
+          setShowDownload(false);
+        }}
+        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700"
+      >
+        Download PPT
+      </button>
+    </div>
+  )}
+</div>
             <button onClick={addSlide} className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg transition">
               <Plus size={13}/>Slide
             </button>

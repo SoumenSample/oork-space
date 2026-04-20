@@ -59,7 +59,7 @@ export default function ProjectPage() {
           <h2 className={`text-sm font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`}>
             Databases
           </h2>
-          {/* <CreateDatabasePopover projectId={projectId} defaultOpen={createDb} /> */}
+          <CreateDatabasePopover projectId={projectId} defaultOpen={createDb} />
         </div>
 
         <div className="mt-6">

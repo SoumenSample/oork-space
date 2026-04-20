@@ -136,7 +136,7 @@ function DraggableDatabaseSection({
           <GripVertical size={14} />
         </span>
 
-        {/* {!isViewOnly && (
+        {!isViewOnly && (
           <button
             type="button"
             onClick={() => onAddBelow(db._id)}
@@ -147,7 +147,7 @@ function DraggableDatabaseSection({
           >
             <Plus size={14} />
           </button>
-        )} */}
+        )}
       </div>
 
       {/*
