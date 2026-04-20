@@ -17,8 +17,6 @@ function getDefaultViews(viewType: string): DbView[] {
   if (["table","timeline"].includes(viewType)) {
     return [
       { id:"all",       label:"visualization", icon:"star",   type:"all",       isDefault:true,  filters:[] },
-      // { id:"by-status", label:"input", icon:"circle", type:"by-status", groupBy:"status",filters:[] },
-      { id:"my-tasks",  label:"show data",  icon:"user",   type:"my-tasks",  filters:[{ field:"assignee",op:"eq",value:"me" }] },
     ];
   }
     if (["charts"].includes(viewType)) {
@@ -45,6 +43,25 @@ function getDefaultViews(viewType: string): DbView[] {
   return [
     // { id:"all", label:"All Items", icon:"star", type:"all", isDefault:true, filters:[] },
   ];
+}
+
+function normalizeSqlLikeTableViews(viewType: string, views: DbView[]): DbView[] {
+  if (!["table", "timeline"].includes(viewType)) {
+    return views;
+  }
+
+  const source = Array.isArray(views) ? views : [];
+  const allView = source.find((view) => String(view?.type || "") === "all") || source[0];
+
+  return [{
+    ...(allView || {}),
+    id: "all",
+    label: "visualization",
+    icon: String(allView?.icon || "star"),
+    type: "all",
+    filters: [],
+    isDefault: true,
+  } as DbView];
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -78,10 +95,13 @@ function DraggableDatabaseSection({
 }: SectionProps) {
 
   const rawViews: DbView[] = useMemo(
-    () =>
-      db.views && db.views.length > 0
+    () => {
+      const viewType = db.viewType || "table";
+      const sourceViews = db.views && db.views.length > 0
         ? (db.views as DbView[])
-        : getDefaultViews(db.viewType || "table"),
+        : getDefaultViews(viewType);
+      return normalizeSqlLikeTableViews(viewType, sourceViews);
+    },
     [db.views, db.viewType]
   );
 

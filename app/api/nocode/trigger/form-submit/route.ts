@@ -12,6 +12,11 @@ export async function POST(req: Request) {
     const appId = String(body?.appId || "");
     const workflowKey = String(body?.workflowKey || "");
     const formData = (body?.formData || {}) as Record<string, unknown>;
+    const databaseId = String(body?.databaseId || "");
+    const triggerPayload = {
+      ...formData,
+      ...(databaseId ? { __databaseId: databaseId } : {}),
+    };
 
     if (!appId || !workflowKey) {
       return NextResponse.json({ error: "Missing appId or workflowKey" }, { status: 400 });
@@ -27,7 +32,7 @@ export async function POST(req: Request) {
       appId,
       workflowId: workflow._id,
       triggerType: "form.submit",
-      triggerPayload: formData,
+      triggerPayload,
       status: "queued",
       stepLogs: [],
     });
@@ -38,7 +43,7 @@ export async function POST(req: Request) {
       workflowId: String(workflow._id),
       appId,
       triggerType: "form.submit",
-      triggerPayload: formData,
+      triggerPayload,
     });
 
     return NextResponse.json({ success: true, runId: run._id }, { status: 202 });

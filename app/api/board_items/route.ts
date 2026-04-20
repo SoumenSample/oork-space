@@ -3,14 +3,7 @@ import connectDB from "@/lib/dbConnect";
 import DatabaseItem from "@/lib/models/DatabaseItem";
 import Database from "@/lib/models/Database";
 import { getAuthUser } from "@/lib/authUser";
-import nodemailer from "nodemailer";
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "kayalabhi04@gmail.com",
-    pass:"jzdwcsrquixkekyf",
-  },
-});
+import { getMailerFrom, isMailerConfigured, transporter } from "@/lib/mailer";
 export async function GET(req: Request) {
   await connectDB();
   const authUser = await getAuthUser();
@@ -83,20 +76,28 @@ export async function POST(req: Request) {
     databaseId,
     values: values || {},
   });
-  await transporter.sendMail({
-  from: process.env.EMAIL,
-  to: values.email, // 👈 email from your form
-  subject: "New Task Assigned",
-  html: `
-    <h2>New Task Assigned</h2>
-    <p><b>Title:</b> ${values.title}</p>
-    <p><b>Description:</b> ${values.description}</p>
-    <p><b>From:</b> ${values.fromDate}</p>
-    <p><b>To:</b> ${values.toDate}</p>
-    <p><b>Milestones:</b> ${values.milestones?.map((m: { title?: string }) => m.title || "").join(", ") || "None"}</p>
-  `,
-});
-console.log("Email sent to:", values.email);
+
+  const recipient = String(values?.email || "").trim();
+  if (recipient && isMailerConfigured()) {
+    try {
+      await transporter.sendMail({
+        from: getMailerFrom("OORK-SPACE"),
+        to: recipient,
+        subject: "New Task Assigned",
+        html: `
+          <h2>New Task Assigned</h2>
+          <p><b>Title:</b> ${values?.title || ""}</p>
+          <p><b>Description:</b> ${values?.description || ""}</p>
+          <p><b>From:</b> ${values?.fromDate || ""}</p>
+          <p><b>To:</b> ${values?.toDate || ""}</p>
+          <p><b>Milestones:</b> ${values?.milestones?.map((m: { title?: string }) => m.title || "").join(", ") || "None"}</p>
+        `,
+      });
+      console.log("Email sent to:", recipient);
+    } catch (error) {
+      console.error("Failed to send assignment email:", error);
+    }
+  }
 
   return NextResponse.json(created);
 }

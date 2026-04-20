@@ -94,6 +94,24 @@ type Property = {
   formula?: string;
 };
 
+function toDateInputValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return "";
+
+  const value = String(raw).trim();
+  if (!value) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
 export default function TableCell({
   row,
   property,
@@ -191,13 +209,15 @@ export default function TableCell({
   }
 
   if (property.type === "date") {
+    const dateInputValue = toDateInputValue(value);
+
     return (
       <div className="w-[220px] px-3 py-2 border-r">
         <Input
           type="date"
-          value={String(value || "")}
+          value={dateInputValue}
           onChange={(e) => setValue(e.target.value)}
-          onBlur={() => save(String(value || ""))}
+          onBlur={() => save(toDateInputValue(value))}
           className="border-none shadow-none focus-visible:ring-0 px-0"
           title="Date"
         />

@@ -1,18 +1,14 @@
-import nodemailer from "nodemailer";
+import { getMailerFrom, isMailerConfigured, transporter } from "@/lib/mailer";
 
 export async function POST(req: Request) {
   const { email } = await req.json();
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: "kayalabhi04@gmail.com",
-      pass: "jzdwcsrquixkekyf",
-    },
-  });
+  if (!isMailerConfigured()) {
+    return Response.json({ success: false, error: "SMTP is not configured" }, { status: 500 });
+  }
 
   await transporter.sendMail({
-    from: "kayalabhi04@gmail.com",
+    from: getMailerFrom("OORK-SPACE"),
     to: email,
     subject: "Hello from your app",
     text: "you are assigned for a task",

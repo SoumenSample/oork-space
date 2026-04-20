@@ -191,13 +191,29 @@
   grid-template-columns: minmax(0, 1fr) 320px;
 }
 
-.nocode-workflow-drawer-split.runs-collapsed {
-  grid-template-columns: minmax(0, 1fr) 44px;
+.nocode-workflow-drawer-split.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .nocode-workflow-drawer-editor {
   min-width: 0;
   min-height: 0;
+  position: relative;
+}
+
+.nocode-workflow-sidebar-expand-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 1px solid var(--nb-border);
+  border-radius: 10px;
+  background: var(--nb-surface);
+  color: var(--nb-text);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 3;
 }
 
 .nocode-workflow-runs-panel {
@@ -206,14 +222,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(120px, 1fr) minmax(160px, 1fr);
-}
-
-.nocode-workflow-runs-panel.collapsed {
-  grid-template-rows: 1fr;
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
+  grid-template-rows: auto auto auto minmax(120px, 1fr) minmax(160px, 1fr);
 }
 
 .nocode-workflow-runs-head {
@@ -223,6 +232,41 @@
   gap: 8px;
   padding: 10px;
   border-bottom: 1px solid var(--nb-border);
+}
+
+.nocode-workflow-sidebar-settings {
+  border-bottom: 1px solid var(--nb-border);
+  background: var(--nb-surface);
+}
+
+.nocode-workflow-settings-head {
+  margin: 0;
+}
+
+.nocode-workflow-settings-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.nocode-workflow-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--nb-muted-text);
+  font-size: 12px;
+}
+
+.nocode-workflow-settings-input {
+  border: 1px solid var(--nb-border);
+  border-radius: 8px;
+  background: var(--nb-input-bg);
+  color: var(--nb-text);
+  padding: 8px;
+  font-size: 13px;
 }
 
 .nocode-workflow-runs-list {
@@ -266,19 +310,6 @@
   padding: 8px;
 }
 
-.nocode-workflow-runs-collapse-rail {
-  border: 0;
-  background: var(--nb-surface-muted);
-  color: var(--nb-text);
-  font-weight: 700;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  width: 100%;
-  height: 100%;
-}
-
 .nocode-workflow-drawer-frame {
   width: 100%;
   height: 100%;
@@ -293,10 +324,14 @@
     grid-template-rows: minmax(0, 1fr) 300px;
   }
 
+  .nocode-workflow-drawer-split.sidebar-collapsed {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   .nocode-workflow-runs-panel {
     border-left: 0;
     border-top: 1px solid var(--nb-border);
-    grid-template-rows: auto auto minmax(100px, 1fr) minmax(120px, 1fr);
+    grid-template-rows: auto auto auto minmax(100px, 1fr) minmax(120px, 1fr);
   }
 }
 
@@ -777,6 +812,69 @@
 .nocode-form-builder-actions {
   display: flex;
   gap: 8px;
+}
+
+.nocode-data-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--nb-border);
+  border-radius: 10px;
+  background: var(--nb-input-bg);
+  padding: 8px;
+}
+
+.nocode-data-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nocode-data-section-head strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--nb-text);
+}
+
+.nocode-data-section-head p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--nb-muted-text);
+}
+
+.nocode-data-grid-wrap {
+  border: 1px solid var(--nb-border);
+  border-radius: 8px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--nb-surface);
+}
+
+.nocode-data-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.nocode-data-grid th,
+.nocode-data-grid td {
+  border-bottom: 1px solid var(--nb-border);
+  padding: 6px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nocode-data-grid th {
+  position: sticky;
+  top: 0;
+  background: var(--nb-surface-muted);
+  color: var(--nb-text);
+  z-index: 1;
 }
 
 .nocode-workflow-list {

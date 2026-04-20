@@ -9,6 +9,20 @@ import {
   hasRequiredPermission,
 } from "../../../../lib/shareAccess";
 
+const ALLOWED_VIEW_TYPES = new Set([
+  "timeline",
+  "table",
+  "board",
+  "gallery",
+  "editor",
+  "documentation",
+  "presentation",
+  "video",
+  "whiteboard",
+  "socialmedia",
+  "chart",
+]);
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -103,6 +117,9 @@ export async function PUT(
     }
     if (typeof body.icon === "string") {
       updatePatch.icon = body.icon;
+    }
+    if (typeof body.viewType === "string" && ALLOWED_VIEW_TYPES.has(body.viewType)) {
+      updatePatch.viewType = body.viewType;
     }
 
     if (Object.keys(updatePatch).length === 0) {

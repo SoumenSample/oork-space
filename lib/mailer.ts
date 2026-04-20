@@ -1,77 +1,35 @@
-// import nodemailer from "nodemailer";
-
-// export const sendEmailOTP = async (email: string, otp: string) => {
-//   try {
-//     // Log for debugging (in development)
-//     console.log(`Attempting to send OTP email to: ${email}`);
-//     console.log(`OTP: ${otp}`);
-
-//     // transporter
-//     const transporter = nodemailer.createTransport({
-//       service: "gmail",
-//       auth: {
-//         user: process.env.EMAIL_USER,
-//         pass: process.env.EMAIL_PASS, // Gmail App Password
-//       },
-//     });
-
-//     // email template
-//     const mailOptions = {
-//       from: `"Workspace Auth" <${process.env.EMAIL_USER}>`,
-//       to: email,
-//       subject: "Verify Your Email - OTP Code",
-//       html: `
-//         <div style="font-family:Arial; padding:20px;">
-//           <h2>Email Verification</h2>
-//           <p>Your verification code is:</p>
-
-//           <div style="
-//             font-size:32px;
-//             font-weight:bold;
-//             letter-spacing:8px;
-//             color:#4f46e5;
-//             margin:20px 0;
-//           ">
-//             ${otp}
-//           </div>
-
-//           <p>This code expires in 10 minutes.</p>
-
-//           <p style="color:#888; font-size:12px;">
-//             If you didn’t request this, ignore this email.
-//           </p>
-//         </div>
-//       `,
-//     };
-
-//     // send email
-//     await transporter.sendMail(mailOptions);
-
-//     console.log(`OTP email sent successfully to: ${email}`);
-//     return { success: true };
-//   } catch (error) {
-//     console.error("Failed to send OTP email:", error);
-//     console.error("Email user:", process.env.EMAIL_USER);
-//     console.error("Email pass length:", process.env.EMAIL_PASS?.length);
-//     return { success: false };
-//   }
-// };
-
-
 import nodemailer from "nodemailer";
 
+const SMTP_USER = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL || "";
+const SMTP_PASS = process.env.SMTP_PASS || process.env.EMAIL_PASS || "";
+const SMTP_SERVICE = process.env.SMTP_SERVICE || "gmail";
+
+export function isMailerConfigured() {
+  return Boolean(SMTP_USER && SMTP_PASS);
+}
+
+export function getMailerFrom(defaultName = "Workspace Auth") {
+  const fromAddress = process.env.MAIL_FROM || SMTP_USER || process.env.EMAIL || "";
+  return fromAddress ? `"${defaultName}" <${fromAddress}>` : undefined;
+}
+
 export const transporter = nodemailer.createTransport({
-  service: "gmail",
+  service: SMTP_SERVICE,
   auth: {
-    user: "kayalabhi04@gmail.com",
-    pass: "jzdwcsrquixkekyf", // app password
+    user: SMTP_USER,
+    pass: SMTP_PASS,
   },
 });
 
 export const sendEmailOTP = async (email: string, otp: string) => {
+  if (!isMailerConfigured()) {
+    console.warn("SMTP is not configured. Skipping OTP email.");
+    return { success: false };
+  }
+
   try {
     await transporter.sendMail({
-      from: `"Workspace Auth" <${process.env.EMAIL_USER || process.env.EMAIL}>`,
+      from: getMailerFrom("Workspace Auth"),
       to: email,
       subject: "Verify Your Email - OTP Code",
       html: `

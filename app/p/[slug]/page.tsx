@@ -213,17 +213,261 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
     return data;
   }
 
+  function readStringField(data, key) {
+    if (!data || typeof data !== 'object') return '';
+    const raw = data[key];
+    if (typeof raw === 'string') return raw.trim();
+    if (raw === null || raw === undefined) return '';
+    return String(raw).trim();
+  }
+
+  function normalizeAuthMode(rawMode) {
+    const mode = String(rawMode || '').trim().toLowerCase();
+    if (!mode) return '';
+
+    if (mode === 'login' || mode === 'sign-in' || mode === 'signin') return 'login';
+    if (mode === 'signup' || mode === 'sign-up' || mode === 'register') return 'signup';
+    if (mode === 'verify-otp' || mode === 'verifyotp' || mode === 'otp') return 'verify-otp';
+
+    return mode;
+  }
+
+  function getCurrentPublicSlug() {
+    const path = String(window.location.pathname || '');
+    if (!path.startsWith('/p/')) return '';
+
+    const slugPart = path.slice(3).split('/')[0] || '';
+    if (!slugPart) return '';
+
+    try {
+      return decodeURIComponent(slugPart);
+    } catch {
+      return slugPart;
+    }
+  }
+
+  function resolveProjectAuthEndpoint(mode) {
+    const slug = getCurrentPublicSlug();
+    const base = '/api/public/auth/' + mode;
+    if (!slug) return base;
+    return base + '?slug=' + encodeURIComponent(slug);
+  }
+
+  function resolveAuthEndpoint(form, mode) {
+    const configured = String(form.getAttribute('data-auth-endpoint') || '').trim();
+    const projectEndpoint = resolveProjectAuthEndpoint(mode);
+
+    if (!configured) return projectEndpoint;
+
+    if (configured.startsWith('/api/public/auth/')) {
+      return configured;
+    }
+
+    // On published builder pages, force auth traffic to project-scoped auth APIs.
+    if (
+      configured === '/api/auth/login'
+      || configured === '/api/auth/signup'
+      || configured === '/api/verify-otp'
+      || configured.startsWith('/api/auth/')
+    ) {
+      return projectEndpoint;
+    }
+
+    return configured;
+  }
+
+  function normalizeRedirectTarget(value) {
+    const configured = String(value || '').trim();
+    if (!configured) return '';
+
+    const normalizedConfigured = configured.toLowerCase();
+    if (normalizedConfigured === '/login' || normalizedConfigured === '/signup') {
+      return '';
+    }
+
+    return configured;
+  }
+
+  function resolveAuthRedirect(form, mode, result) {
+    const configured = normalizeRedirectTarget(form.getAttribute('data-auth-redirect'));
+    if (configured) return configured;
+
+    // Avoid redirecting builder users into platform auth pages unless explicitly configured.
+    return '';
+  }
+
+  function resolveWorkflowRedirect(primaryElement, fallbackElement) {
+    const fromPrimaryWorkflow = normalizeRedirectTarget(primaryElement && primaryElement.getAttribute
+      ? primaryElement.getAttribute('data-workflow-redirect')
+      : '');
+    if (fromPrimaryWorkflow) return fromPrimaryWorkflow;
+
+    const fromPrimarySuccess = normalizeRedirectTarget(primaryElement && primaryElement.getAttribute
+      ? primaryElement.getAttribute('data-success-redirect')
+      : '');
+    if (fromPrimarySuccess) return fromPrimarySuccess;
+
+    const fromFallbackWorkflow = normalizeRedirectTarget(fallbackElement && fallbackElement.getAttribute
+      ? fallbackElement.getAttribute('data-workflow-redirect')
+      : '');
+    if (fromFallbackWorkflow) return fromFallbackWorkflow;
+
+    const fromFallbackSuccess = normalizeRedirectTarget(fallbackElement && fallbackElement.getAttribute
+      ? fallbackElement.getAttribute('data-success-redirect')
+      : '');
+    if (fromFallbackSuccess) return fromFallbackSuccess;
+
+    return '';
+  }
+
+  function resolveAuthPayload(form, mode, data) {
+    const email = readStringField(data, 'email');
+    const password = readStringField(data, 'password');
+    const pageSlug = getCurrentPublicSlug();
+    const databaseId = String(form.getAttribute('data-database-id') || '').trim();
+
+    if (!databaseId) {
+      throw new Error('Auth form is not linked to a table. In builder, select this form and bind the User table first.');
+    }
+
+    if (mode === 'login') {
+      if (!email || !password) {
+        throw new Error('Email and password are required.');
+      }
+
+      return {
+        email,
+        password,
+        pageSlug,
+        ...(databaseId ? { databaseId } : {}),
+      };
+    }
+
+    if (mode === 'signup') {
+      const name = readStringField(data, 'name');
+      if (!name || !email || !password) {
+        throw new Error('Name, email, and password are required.');
+      }
+
+      return {
+        name,
+        email,
+        password,
+        pageSlug,
+        ...(databaseId ? { databaseId } : {}),
+      };
+    }
+
+    if (mode === 'verify-otp') {
+      const otp = readStringField(data, 'otp') || readStringField(data, 'code');
+      if (!email || !otp) {
+        throw new Error('Email and OTP are required.');
+      }
+
+      return {
+        email,
+        otp,
+        pageSlug,
+        ...(databaseId ? { databaseId } : {}),
+      };
+    }
+
+    throw new Error('Unsupported auth form mode. Use login, signup, or verify-otp.');
+  }
+
+  async function submitAuthForm(form) {
+    const mode = normalizeAuthMode(form.getAttribute('data-auth-form'));
+    const shouldAlert = parseAlertPreference(form.getAttribute('data-auth-alert') || 'true');
+
+    if (mode !== 'login' && mode !== 'signup' && mode !== 'verify-otp') {
+      if (shouldAlert) {
+        showNotification('Unsupported auth form mode. Use login, signup, or verify-otp.', 'error');
+      }
+      return;
+    }
+
+    const endpoint = resolveAuthEndpoint(form, mode);
+    const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+    let originalButtonText = '';
+    const buttonLoadingText = mode === 'login'
+      ? 'Signing in...'
+      : (mode === 'signup' ? 'Creating account...' : 'Verifying...');
+
+    if (submitButton) {
+      if (submitButton instanceof HTMLButtonElement) {
+        originalButtonText = submitButton.textContent || '';
+        submitButton.textContent = buttonLoadingText;
+        submitButton.disabled = true;
+      } else if (submitButton instanceof HTMLInputElement) {
+        originalButtonText = submitButton.value || '';
+        submitButton.value = buttonLoadingText;
+        submitButton.disabled = true;
+      }
+    }
+
+    try {
+      const data = formDataToObject(new FormData(form));
+      const payload = resolveAuthPayload(form, mode, data);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = String(result?.message || result?.error || 'Authentication request failed');
+        throw new Error(message);
+      }
+
+      if (shouldAlert) {
+        const successMessage = mode === 'signup'
+          ? String(result?.message || 'Account created successfully.')
+          : (mode === 'verify-otp'
+            ? String(result?.message || 'OTP verified successfully.')
+            : String(result?.message || 'Signed in successfully.'));
+        showNotification(successMessage, 'success');
+      }
+
+      const redirectTarget = resolveAuthRedirect(form, mode, result);
+      if (redirectTarget) {
+        setTimeout(() => {
+          window.location.assign(redirectTarget);
+        }, shouldAlert ? 450 : 0);
+      }
+    } catch (err) {
+      if (shouldAlert) {
+        const message = err && err.message ? err.message : 'Authentication request failed';
+        showNotification(message, 'error');
+      }
+    } finally {
+      if (submitButton) {
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+          if (originalButtonText) submitButton.textContent = originalButtonText;
+        } else if (submitButton instanceof HTMLInputElement) {
+          submitButton.disabled = false;
+          if (originalButtonText) submitButton.value = originalButtonText;
+        }
+      }
+    }
+  }
+
   async function triggerWorkflowExecution(params) {
     const appId = String(params.appId || '');
     const workflowKey = String(params.workflowKey || '');
+    const databaseId = String(params.databaseId || '');
     const shouldAlert = Boolean(params.shouldAlert);
+    const redirectTarget = String(params.redirectTarget || '').trim();
     const formData = params.formData || {};
 
     try {
       const res = await fetch('/api/nocode/trigger/form-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appId, workflowKey, formData })
+        body: JSON.stringify({ appId, workflowKey, databaseId, formData })
       });
 
       const result = await res.json().catch(() => ({}));
@@ -232,28 +476,41 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
       }
 
       const runId = result?.runId;
-      if (!shouldAlert || !runId) return;
+      const shouldWaitForRunResult = Boolean(runId) && (shouldAlert || Boolean(redirectTarget));
+      const run = shouldWaitForRunResult ? await pollRunResult(runId) : null;
 
-      const run = await pollRunResult(runId);
-      const logMessages = run ? extractLogMessages(run) : [];
-      for (const msg of logMessages) {
-        console.info('[workflow:action.log]', msg);
+      if (run) {
+        const logMessages = extractLogMessages(run);
+        for (const msg of logMessages) {
+          console.info('[workflow:action.log]', msg);
+        }
       }
 
-      const alertMsg = run ? extractAlertMessage(run) : null;
+      if (shouldAlert && runId) {
+        const alertMsg = run ? extractAlertMessage(run) : null;
 
-      if (alertMsg) {
-        const alertType = run.status === 'success' ? 'success' : 'error';
-        showNotification(alertMsg, alertType);
-      } else {
-        const isFailed = run && run.status === 'failed';
-        const statusText = run ? (run.status === 'success' ? 'completed' : run.status) : 'triggered';
-        const failureReason = isFailed ? extractRunFailureReason(run) : '';
-        const details = failureReason ? ' - ' + failureReason : '';
-        showNotification(
-          'Workflow ' + statusText + details + ' (Run: ' + runId + ')',
-          isFailed ? 'error' : 'success'
-        );
+        if (alertMsg) {
+          const alertType = run.status === 'success' ? 'success' : 'error';
+          showNotification(alertMsg, alertType);
+        } else {
+          const isFailed = run && run.status === 'failed';
+          const statusText = run ? (run.status === 'success' ? 'completed' : run.status) : 'triggered';
+          const failureReason = isFailed ? extractRunFailureReason(run) : '';
+          const details = failureReason ? ' - ' + failureReason : '';
+          showNotification(
+            'Workflow ' + statusText + details + ' (Run: ' + runId + ')',
+            isFailed ? 'error' : 'success'
+          );
+        }
+      }
+
+      if (redirectTarget) {
+        const canRedirect = runId ? Boolean(run && run.status === 'success') : true;
+        if (canRedirect) {
+          setTimeout(() => {
+            window.location.assign(redirectTarget);
+          }, shouldAlert ? 450 : 0);
+        }
       }
     } catch (err) {
       if (shouldAlert) {
@@ -352,15 +609,25 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
 
   async function onSubmit(e) {
     const form = e.target;
-    if (!form || !form.matches('form[data-workflow-key]')) return;
+    if (!form || form.tagName !== 'FORM') return;
+
+    if (form.matches('form[data-auth-form]')) {
+      e.preventDefault();
+      await submitAuthForm(form);
+      return;
+    }
+
+    if (!form.matches('form[data-workflow-key]')) return;
     e.preventDefault();
 
     const workflowKey = form.getAttribute('data-workflow-key') || '';
     const appId = form.getAttribute('data-app-id') || '';
+    const databaseId = form.getAttribute('data-database-id') || '';
     const shouldAlert = parseAlertPreference(form.getAttribute('data-workflow-alert'));
+    const redirectTarget = resolveWorkflowRedirect(form, null);
     const data = formDataToObject(new FormData(form));
 
-    await triggerWorkflowExecution({ appId, workflowKey, shouldAlert, formData: data });
+    await triggerWorkflowExecution({ appId, workflowKey, databaseId, shouldAlert, redirectTarget, formData: data });
   }
 
   async function onStandaloneTriggerClick(e) {
@@ -388,10 +655,17 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
       || ''
     ).trim();
 
+    const databaseId = String(
+      trigger.getAttribute('data-database-id')
+      || (scope.getAttribute ? scope.getAttribute('data-database-id') : '')
+      || ''
+    ).trim();
+
     const shouldAlert = parseAlertPreference(
       trigger.getAttribute('data-workflow-alert')
       || (scope.getAttribute ? scope.getAttribute('data-workflow-alert') : 'true')
     );
+    const redirectTarget = resolveWorkflowRedirect(trigger, scope);
 
     if (!workflowKey || !appId) {
       if (shouldAlert) {
@@ -401,7 +675,7 @@ export default async function PublicPage({ params }: { params: Promise<{ slug: s
     }
 
     const data = collectStandalonePayload(scope);
-    await triggerWorkflowExecution({ appId, workflowKey, shouldAlert, formData: data });
+    await triggerWorkflowExecution({ appId, workflowKey, databaseId, shouldAlert, redirectTarget, formData: data });
   }
 
   document.addEventListener('submit', onSubmit);

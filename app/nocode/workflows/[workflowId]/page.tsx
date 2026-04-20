@@ -28,6 +28,10 @@ export default function WorkflowBuilderPage() {
     const embed = searchParams.get("embed");
     return embed === "1" || embed === "true";
   }, [searchParams]);
+  const useExternalSidebar = useMemo(() => {
+    const externalSidebar = searchParams.get("externalSidebar");
+    return externalSidebar === "1" || externalSidebar === "true";
+  }, [searchParams]);
 
   useEffect(() => {
     if (!workflowId) return;
@@ -161,6 +165,8 @@ export default function WorkflowBuilderPage() {
         <WorkflowEditor
           initialNodes={workflow?.draftGraph?.nodes || []}
           initialEdges={workflow?.draftGraph?.edges || []}
+          appId={String(workflow?.appId || "")}
+          externalSettingsSidebar={isEmbed && useExternalSidebar}
           onSave={async (draftGraph) => {
             await fetch(`/api/nocode/workflows/${workflowId}`, {
               method: "PUT",
