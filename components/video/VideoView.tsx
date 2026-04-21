@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Download, Volume2, VolumeX, Maximize,
   Type, RotateCcw, FastForward, Rewind, Play, Pause,
   SkipBack, SkipForward, Film, Palette, Sliders, Music,
-  Upload, Scissors, Copy, MoveVertical, Sun, Contrast,
+  Upload, Scissors, Copy, MoveVertical, Sun, Contrast, Sparkles,
   FlipHorizontal, FlipVertical, RotateCw, ZoomIn,
 } from "lucide-react";
 
@@ -14,6 +14,8 @@ interface TextOverlay {
   id: string; text: string; startTime: number; endTime: number;
   x: number; y: number; fontSize: number; color: string; bgColor: string;
   bold: boolean; italic: boolean; fontFamily: string;
+  animation?: "none" | "fade" | "slide-up" | "slide-left" | "pop";
+  animationDuration?: number;
 }
 
 interface Clip {
@@ -58,6 +60,24 @@ const FILTER_PRESETS = [
   { name:"Summer",    brightness:110,contrast:105,saturation:130,hue:15, sepia:10,grayscale:0  },
   { name:"Noir",      brightness:85, contrast:140,saturation:0,  hue:0,  sepia:30,grayscale:80 },
 ];
+
+const TEXT_ANIMATIONS = [
+  { value: "none", label: "None" },
+  { value: "fade", label: "Fade" },
+  { value: "slide-up", label: "Slide Up" },
+  { value: "slide-left", label: "Slide Left" },
+  { value: "pop", label: "Pop" },
+] as const;
+
+const MERGE_TRANSITIONS = [
+  { value: "none", label: "None" },
+  { value: "crossfade", label: "Crossfade" },
+  { value: "dip-to-black", label: "Dip To Black" },
+  { value: "slide-left", label: "Slide Left" },
+  { value: "wipe-right", label: "Wipe Right" },
+] as const;
+
+const DEFAULT_TEXT_ANIMATION_DURATION = 0.6;
 
 const FONTS = ["Arial","Georgia","Impact","Courier New","Trebuchet MS","Comic Sans MS","Verdana","Helvetica"];
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/webm,video/ogg,video/mov,video/avi,video/mkv,video/*";
@@ -195,7 +215,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   const [progress, setProgress]         = useState(0);
   const [currentTime, setCurrentTime]   = useState(0);
   const [duration, setDuration]         = useState(0);
-  const [activePanel, setActivePanel]   = useState<"clips"|"filter"|"adjust"|"text"|"audio"|"speed"|"transform"|"crop">("clips");
+  const [activePanel, setActivePanel]   = useState<"clips"|"filter"|"adjust"|"text"|"animation"|"audio"|"speed"|"transform"|"crop">("clips");
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTab, setAddTab]             = useState<"url"|"upload">("upload");
   const [newUrl, setNewUrl]             = useState("");
@@ -211,6 +231,10 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   const [overlayFont, setOverlayFont]   = useState("Arial");
   const [overlayBold, setOverlayBold]   = useState(false);
   const [overlayItalic, setOverlayItalic] = useState(false);
+  const [overlayAnimation, setOverlayAnimation] = useState<TextOverlay["animation"]>("fade");
+  const [overlayAnimationDuration, setOverlayAnimationDuration] = useState(0.6);
+  const [mergeTransition, setMergeTransition] = useState<(typeof MERGE_TRANSITIONS)[number]["value"]>("crossfade");
+  const [mergeTransitionDuration, setMergeTransitionDuration] = useState(0.4);
   const [overlayX, setOverlayX]         = useState(50);
   const [overlayY, setOverlayY]         = useState(80);
   const [editingOverlayId, setEditingOverlayId] = useState<string|null>(null);
@@ -252,6 +276,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   const autoPlayNextRef = useRef(false);
   const lastLocalEditAtRef = useRef<number>(Date.now());
   const lastAppliedRemoteSnapshotRef = useRef<string>("");
+  const pendingSettingsSyncRef = useRef(false);
   const sel = selectedClip;
   const isYouTubeClip = isYouTubeEmbedUrl(sel.url);
 
@@ -262,23 +287,70 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   const trimEnd = Math.max(trimStart + 0.1, Math.min(sel.endTrim ?? sourceDuration, sourceDuration));
   const effectiveDuration = Math.max(trimEnd - trimStart, 0.1);
 
+  const getProjectSettingsSnapshot = useCallback(() => ({
+    overlayAnimation,
+    overlayAnimationDuration,
+    mergeTransition,
+    mergeTransitionDuration,
+  }), [overlayAnimation, overlayAnimationDuration, mergeTransition, mergeTransitionDuration]);
+
+  const localSettingsKey = `video-settings:${databaseId}`;
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(localSettingsKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<ReturnType<typeof getProjectSettingsSnapshot>>;
+      if (typeof parsed.overlayAnimation === "string") {
+        setOverlayAnimation(parsed.overlayAnimation as TextOverlay["animation"]);
+      }
+      if (typeof parsed.overlayAnimationDuration === "number") {
+        setOverlayAnimationDuration(parsed.overlayAnimationDuration);
+      }
+      if (typeof parsed.mergeTransition === "string") {
+        setMergeTransition(parsed.mergeTransition as (typeof MERGE_TRANSITIONS)[number]["value"]);
+      }
+      if (typeof parsed.mergeTransitionDuration === "number") {
+        setMergeTransitionDuration(parsed.mergeTransitionDuration);
+      }
+    } catch {
+      // Ignore localStorage parse failures.
+    }
+  }, [localSettingsKey]);
+
   // ── Load from DB ──
   useEffect(() => {
     const load = async () => {
       try {
         const res  = await fetch(`/api/databases/${databaseId}/video`);
         const json = await res.json();
-        if (json.clips?.length) {
-          // Filter out any local blob URLs (they won't survive refresh)
-          const restored: Clip[] = json.clips.map((c: Clip) => ({
-            ...c,
-            url: c.localFile ? "" : c.url,
-            audioUrl: c.audioUrl ?? null,
-            audioTitle: c.audioTitle ?? null,
-            muteOriginalAudio: c.muteOriginalAudio ?? false,
-            audioVolume: c.audioVolume ?? 1,
-          }));
-          lastAppliedRemoteSnapshotRef.current = JSON.stringify(restored);
+        const incomingSettings = json?.settings ?? {};
+        if (typeof incomingSettings.overlayAnimation === "string") {
+          setOverlayAnimation(incomingSettings.overlayAnimation as TextOverlay["animation"]);
+        }
+        if (typeof incomingSettings.overlayAnimationDuration === "number") {
+          setOverlayAnimationDuration(incomingSettings.overlayAnimationDuration);
+        }
+        if (typeof incomingSettings.mergeTransition === "string") {
+          setMergeTransition(incomingSettings.mergeTransition as (typeof MERGE_TRANSITIONS)[number]["value"]);
+        }
+        if (typeof incomingSettings.mergeTransitionDuration === "number") {
+          setMergeTransitionDuration(incomingSettings.mergeTransitionDuration);
+        }
+
+        const rawClips = Array.isArray(json?.clips) ? json.clips : [];
+        // Filter out any local blob URLs (they won't survive refresh)
+        const restored: Clip[] = rawClips.map((c: Clip) => ({
+          ...c,
+          url: c.localFile ? "" : c.url,
+          audioUrl: c.audioUrl ?? null,
+          audioTitle: c.audioTitle ?? null,
+          muteOriginalAudio: c.muteOriginalAudio ?? false,
+          audioVolume: c.audioVolume ?? 1,
+        }));
+
+        lastAppliedRemoteSnapshotRef.current = JSON.stringify({ clips: restored, settings: { ...getProjectSettingsSnapshot(), ...incomingSettings } });
+        if (restored.length > 0) {
           setClips(restored);
           setSelectedClip(restored[0]);
         }
@@ -286,7 +358,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       finally { setLoadedOnce(true); }
     };
     load();
-  }, [databaseId]);
+  }, [databaseId, getProjectSettingsSnapshot]);
 
   // ── Auto-save ──
   useEffect(() => {
@@ -299,18 +371,20 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
           ...c,
           url: c.localFile ? "" : c.url,
         }));
+        const settings = getProjectSettingsSnapshot();
         await fetch(`/api/databases/${databaseId}/video`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clips: saveable }),
+          body: JSON.stringify({ clips: saveable, settings }),
         });
-        lastAppliedRemoteSnapshotRef.current = JSON.stringify(saveable);
+        pendingSettingsSyncRef.current = false;
+        lastAppliedRemoteSnapshotRef.current = JSON.stringify({ clips: saveable, settings });
         setSavedAt(new Date().toLocaleTimeString());
       } catch {}
       finally { setSaving(false); }
-    }, 3000);
+    }, 1000);
     return () => clearTimeout(t);
-  }, [clips, databaseId, loadedOnce]);
+  }, [clips, databaseId, getProjectSettingsSnapshot, loadedOnce]);
 
   useEffect(() => {
     if (!loadedOnce) return;
@@ -318,11 +392,24 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   }, [clips, loadedOnce]);
 
   useEffect(() => {
+    if (!loadedOnce) return;
+    lastLocalEditAtRef.current = Date.now();
+    pendingSettingsSyncRef.current = true;
+
+    try {
+      window.localStorage.setItem(localSettingsKey, JSON.stringify(getProjectSettingsSnapshot()));
+    } catch {
+      // Ignore localStorage quota or availability errors.
+    }
+  }, [loadedOnce, overlayAnimation, overlayAnimationDuration, mergeTransition, mergeTransitionDuration, localSettingsKey, getProjectSettingsSnapshot]);
+
+  useEffect(() => {
     if (!databaseId || !loadedOnce) return;
 
     let cancelled = false;
     const poll = async () => {
-      if (Date.now() - lastLocalEditAtRef.current < 1200) return;
+      // Give autosave enough time to persist recent local edits before applying remote snapshots.
+      if (Date.now() - lastLocalEditAtRef.current < 8000) return;
       if (editingOverlayId) return;
 
       try {
@@ -339,12 +426,32 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
           muteOriginalAudio: c.muteOriginalAudio ?? false,
           audioVolume: c.audioVolume ?? 1,
         }));
-        const snapshot = JSON.stringify(restored);
+
+        const incomingSettings = json?.settings ?? {};
+        const shouldApplyIncomingSettings = !pendingSettingsSyncRef.current;
+        const snapshot = JSON.stringify({
+          clips: restored,
+          settings: shouldApplyIncomingSettings ? { ...getProjectSettingsSnapshot(), ...incomingSettings } : getProjectSettingsSnapshot(),
+        });
         if (snapshot === lastAppliedRemoteSnapshotRef.current) return;
 
         lastAppliedRemoteSnapshotRef.current = snapshot;
         setClips(restored);
         setSelectedClip((prev) => restored.find((c) => c.id === prev.id) || restored[0]);
+        if (shouldApplyIncomingSettings) {
+          if (typeof incomingSettings.overlayAnimation === "string") {
+            setOverlayAnimation(incomingSettings.overlayAnimation as TextOverlay["animation"]);
+          }
+          if (typeof incomingSettings.overlayAnimationDuration === "number") {
+            setOverlayAnimationDuration(incomingSettings.overlayAnimationDuration);
+          }
+          if (typeof incomingSettings.mergeTransition === "string") {
+            setMergeTransition(incomingSettings.mergeTransition as (typeof MERGE_TRANSITIONS)[number]["value"]);
+          }
+          if (typeof incomingSettings.mergeTransitionDuration === "number") {
+            setMergeTransitionDuration(incomingSettings.mergeTransitionDuration);
+          }
+        }
       } catch {
         // Ignore transient collaborator polling errors.
       }
@@ -358,7 +465,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       cancelled = true;
       clearInterval(t);
     };
-  }, [databaseId, loadedOnce, editingOverlayId]);
+  }, [databaseId, loadedOnce, editingOverlayId, getProjectSettingsSnapshot]);
 
   // ── Sync video props ──
   useEffect(() => {
@@ -518,18 +625,24 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       return;
     }
 
+    const splitStamp = Date.now();
+
     const first: Clip = {
       ...sel,
-      id: Date.now().toString() + "-a",
+      id: `${splitStamp}-a`,
       endTrim: cutAt,
       title: `${sel.title} (Part 1)`,
+      addedAt: new Date(splitStamp).toISOString(),
+      textOverlays: [...sel.textOverlays],
     };
 
     const second: Clip = {
       ...sel,
-      id: Date.now().toString() + "-b",
+      id: `${splitStamp}-b`,
       startTrim: cutAt,
       title: `${sel.title} (Part 2)`,
+      addedAt: new Date(splitStamp + 1).toISOString(),
+      textOverlays: [...sel.textOverlays],
     };
 
     setClips(prev => {
@@ -641,6 +754,57 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
   const getTransform = (c: Clip) =>
     `scaleX(${c.flipH ? -1 : 1}) scaleY(${c.flipV ? -1 : 1}) rotate(${c.rotate}deg)`;
 
+  const applyToAllClips = useCallback((updates: Partial<Clip>) => {
+    setClips((prev) => prev.map((clip) => ({ ...clip, ...updates })));
+    setSelectedClip((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  const applySelectedEffectsToAllClips = useCallback(() => {
+    applyToAllClips({
+      brightness: sel.brightness,
+      contrast: sel.contrast,
+      saturation: sel.saturation,
+      hue: sel.hue,
+      blur: sel.blur,
+      sepia: sel.sepia,
+      grayscale: sel.grayscale,
+      vignette: sel.vignette,
+      opacity: sel.opacity,
+      flipH: sel.flipH,
+      flipV: sel.flipV,
+      rotate: sel.rotate,
+    });
+  }, [applyToAllClips, sel]);
+
+  const getTextAnimationState = useCallback((overlay: TextOverlay, videoTime: number) => {
+    const animation = overlay.animation || "none";
+    const animDuration = Math.max(0.1, overlay.animationDuration ?? DEFAULT_TEXT_ANIMATION_DURATION);
+
+    const inProgress = Math.min(Math.max((videoTime - overlay.startTime) / animDuration, 0), 1);
+    const outProgress = Math.min(Math.max((overlay.endTime - videoTime) / animDuration, 0), 1);
+    const easeIn = 1 - Math.pow(1 - inProgress, 3);
+    const easeOut = 1 - Math.pow(1 - outProgress, 3);
+    const envelope = Math.min(easeIn, easeOut);
+
+    if (animation === "none") {
+      return { opacity: 1, translateX: 0, translateY: 0, scale: 1 };
+    }
+
+    if (animation === "fade") {
+      return { opacity: envelope, translateX: 0, translateY: 0, scale: 1 };
+    }
+
+    if (animation === "slide-up") {
+      return { opacity: envelope, translateX: 0, translateY: (1 - envelope) * 18, scale: 1 };
+    }
+
+    if (animation === "slide-left") {
+      return { opacity: envelope, translateX: (1 - envelope) * 24, translateY: 0, scale: 1 };
+    }
+
+    return { opacity: envelope, translateX: 0, translateY: 0, scale: 0.8 + envelope * 0.2 };
+  }, []);
+
   // ── Add from URL ──
   const addFromUrl = () => {
     if (!newUrl.trim()) { setUrlError("Enter a URL"); return; }
@@ -747,6 +911,8 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       x: overlayX, y: overlayY, fontSize: overlayFontSize,
       color: overlayColor, bgColor: overlayBg,
       bold: overlayBold, italic: overlayItalic, fontFamily: overlayFont,
+      animation: overlayAnimation,
+      animationDuration: Math.max(0.1, overlayAnimationDuration),
     };
     updateClip({ textOverlays: [...sel.textOverlays, ov] });
     setOverlayText("");
@@ -756,6 +922,38 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
     updateClip({
       textOverlays: sel.textOverlays.map(o => o.id === id ? { ...o, ...updates } : o),
     });
+  };
+
+  const selectedOverlay = sel.textOverlays.find((o) => o.id === editingOverlayId) || null;
+
+  const applyAnimationToAllTextLayersInClip = () => {
+    updateClip({
+      textOverlays: sel.textOverlays.map((o) => ({
+        ...o,
+        animation: overlayAnimation,
+        animationDuration: Math.max(0.1, overlayAnimationDuration),
+      })),
+    });
+  };
+
+  const applyAnimationToAllTextLayersInProject = () => {
+    const nextDuration = Math.max(0.1, overlayAnimationDuration);
+    setClips((prev) => prev.map((clip) => ({
+      ...clip,
+      textOverlays: clip.textOverlays.map((o) => ({
+        ...o,
+        animation: overlayAnimation,
+        animationDuration: nextDuration,
+      })),
+    })));
+    setSelectedClip((prev) => ({
+      ...prev,
+      textOverlays: prev.textOverlays.map((o) => ({
+        ...o,
+        animation: overlayAnimation,
+        animationDuration: nextDuration,
+      })),
+    }));
   };
 
   const moveOverlay = useCallback((id: string, x: number, y: number) => {
@@ -1023,11 +1221,16 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       return;
     }
 
-    const exportableClips = clips.filter((c) => typeof c.url === "string" && c.url.trim().length > 0);
-    if (exportableClips.length === 0) {
-      alert("No exportable clips found. Add uploaded/direct video clips first.");
+    const clipsMissingSource = clips.filter((c) => typeof c.url !== "string" || c.url.trim().length === 0);
+    if (clipsMissingSource.length > 0) {
+      const missingList = clipsMissingSource.slice(0, 3).map((c) => c.title || "Untitled clip").join(", ");
+      alert(`Export needs all timeline clips to have a video source. Missing source in: ${missingList}${clipsMissingSource.length > 3 ? "..." : ""}`);
       return;
     }
+
+    const exportableClips = clips.map((clip, index) => ({ clip, index }))
+      .sort((a, b) => a.index - b.index)
+      .map((item) => item.clip);
 
     const pickMimeType = () => {
       const candidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
@@ -1074,8 +1277,23 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       throw lastError || new Error("Failed to load media source");
     };
 
-    const drawFrame = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, clip: Clip, video: HTMLVideoElement, videoTime: number) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const drawFrame = (
+      ctx: CanvasRenderingContext2D,
+      canvas: HTMLCanvasElement,
+      clip: Clip,
+      video: HTMLVideoElement,
+      videoTime: number,
+      options?: {
+        clear?: boolean;
+        alpha?: number;
+        offsetX?: number;
+        clipRect?: { x: number; width: number };
+      }
+    ) => {
+      const shouldClear = options?.clear ?? true;
+      const alpha = options?.alpha ?? 1;
+      const offsetX = options?.offsetX ?? 0;
+      if (shouldClear) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const sourceW = Math.max(video.videoWidth || canvas.width, 1);
       const sourceH = Math.max(video.videoHeight || canvas.height, 1);
@@ -1084,10 +1302,18 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       const drawH = sourceH * scale;
 
       ctx.save();
+      if (options?.clipRect) {
+        const clampedX = Math.max(0, Math.min(options.clipRect.x, canvas.width));
+        const clampedWidth = Math.max(0, Math.min(options.clipRect.width, canvas.width - clampedX));
+        ctx.beginPath();
+        ctx.rect(clampedX, 0, clampedWidth, canvas.height);
+        ctx.clip();
+      }
       ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.translate(offsetX, 0);
       ctx.rotate((clip.rotate * Math.PI) / 180);
       ctx.scale(clip.flipH ? -1 : 1, clip.flipV ? -1 : 1);
-      ctx.globalAlpha = clip.opacity / 100;
+      ctx.globalAlpha = (clip.opacity / 100) * alpha;
       ctx.filter = `brightness(${clip.brightness}%) contrast(${clip.contrast}%) saturate(${clip.saturation}%) hue-rotate(${clip.hue}deg) blur(${clip.blur}px) sepia(${clip.sepia}%) grayscale(${clip.grayscale}%)`;
       ctx.drawImage(video, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();
@@ -1110,11 +1336,13 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       clip.textOverlays
         .filter((o) => videoTime >= o.startTime && videoTime <= o.endTime)
         .forEach((o) => {
-          const x = (o.x / 100) * canvas.width;
-          const y = (o.y / 100) * canvas.height;
+          const animationState = getTextAnimationState(o, videoTime);
+          const x = (o.x / 100) * canvas.width + animationState.translateX;
+          const y = (o.y / 100) * canvas.height + animationState.translateY;
           const fontWeight = o.bold ? "bold" : "normal";
           const fontStyle = o.italic ? "italic" : "normal";
-          const font = `${fontStyle} ${fontWeight} ${Math.max(10, o.fontSize)}px ${o.fontFamily || "Arial"}`;
+          const animatedFontSize = Math.max(10, o.fontSize * animationState.scale);
+          const font = `${fontStyle} ${fontWeight} ${animatedFontSize}px ${o.fontFamily || "Arial"}`;
           ctx.font = font;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -1130,11 +1358,14 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
             ctx.fillRect(x - boxW / 2, y - boxH / 2, boxW, boxH);
           }
 
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, Math.min(1, animationState.opacity));
           ctx.fillStyle = o.color || "#ffffff";
           ctx.shadowColor = "rgba(0,0,0,0.8)";
           ctx.shadowBlur = 4;
           ctx.fillText(o.text, x, y);
           ctx.shadowBlur = 0;
+          ctx.restore();
         });
     };
 
@@ -1144,10 +1375,19 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
           requestVideoFrameCallback?: (cb: () => void) => number;
         };
 
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+
         if (typeof videoWithFrameCallback.requestVideoFrameCallback === "function") {
-          videoWithFrameCallback.requestVideoFrameCallback(() => resolve());
+          videoWithFrameCallback.requestVideoFrameCallback(() => finish());
+          // Fallback so hidden-tab or decode stalls don't block export forever.
+          setTimeout(finish, 50);
         } else {
-          setTimeout(resolve, 16);
+          setTimeout(finish, 16);
         }
       });
 
@@ -1188,6 +1428,8 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
       };
 
       recorder.start(250);
+
+      let nextClipStartOffsetSeconds = 0;
 
       for (let i = 0; i < exportableClips.length; i += 1) {
         const clip = exportableClips[i];
@@ -1236,12 +1478,14 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
         await loadMediaWithFallback(v, getExportMediaCandidates(clip.url));
 
         const sourceDur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : (clip.endTrim ?? clip.startTrim + 0.1);
-        const clipStart = Math.max(0, Math.min(clip.startTrim, Math.max(sourceDur - 0.1, 0)));
-        const clipEnd = Math.max(clipStart + 0.1, Math.min(clip.endTrim ?? sourceDur, sourceDur));
+        const clipStartBase = Math.max(0, Math.min(clip.startTrim, Math.max(sourceDur - 0.1, 0)));
+        const clipEnd = Math.max(clipStartBase + 0.1, Math.min(clip.endTrim ?? sourceDur, sourceDur));
+        const clipStart = Math.min(clipEnd - 0.05, clipStartBase + nextClipStartOffsetSeconds);
+        nextClipStartOffsetSeconds = 0;
 
         v.currentTime = clipStart;
         await waitFor(v, "seeked");
-        await v.play();
+        await v.play().catch(() => {});
         if (replacementAudio) {
           replacementAudio.currentTime = clipStart;
           await replacementAudio.play().catch(() => {});
@@ -1250,6 +1494,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
         let previousTime = v.currentTime;
         let lastAdvancedAt = performance.now();
         let staleFrameCount = 0;
+        let stallRecoveryAttempts = 0;
 
         while (v.currentTime < clipEnd && !v.ended) {
           drawFrame(ctx, canvas, clip, v, v.currentTime);
@@ -1266,14 +1511,103 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
               staleFrameCount = 0;
             }
 
-            if (performance.now() - lastAdvancedAt > 3500) {
+            if (performance.now() - lastAdvancedAt > 1200) {
+              const targetTime = Math.min(clipEnd, Math.max(v.currentTime + 0.033, previousTime + 0.033));
+              try {
+                v.currentTime = targetTime;
+                await waitFor(v, "seeked", 2000);
+                lastAdvancedAt = performance.now();
+                stallRecoveryAttempts += 1;
+              } catch {
+                // Ignore and continue trying until limit is reached.
+              }
+            }
+
+            if (stallRecoveryAttempts > 10) {
               throw new Error(`Playback stalled while exporting clip: ${clip.title}`);
             }
           } else {
             staleFrameCount = 0;
             lastAdvancedAt = performance.now();
+            stallRecoveryAttempts = 0;
           }
           previousTime = v.currentTime;
+        }
+
+        let didApplyTransition = false;
+
+        if (mergeTransition !== "none" && mergeTransitionDuration > 0.05 && i < exportableClips.length - 1) {
+          const nextClip = exportableClips[i + 1];
+          const transitionProbe = document.createElement("video");
+          transitionProbe.crossOrigin = "anonymous";
+          transitionProbe.preload = "auto";
+          transitionProbe.playsInline = true;
+
+          try {
+            await loadMediaWithFallback(transitionProbe, getExportMediaCandidates(nextClip.url));
+            const nextSourceDur = Number.isFinite(transitionProbe.duration) && transitionProbe.duration > 0
+              ? transitionProbe.duration
+              : (nextClip.endTrim ?? nextClip.startTrim + 0.1);
+            const nextStart = Math.max(0, Math.min(nextClip.startTrim, Math.max(nextSourceDur - 0.1, 0)));
+            const nextEnd = Math.max(nextStart + 0.1, Math.min(nextClip.endTrim ?? nextSourceDur, nextSourceDur));
+
+            const availableCurrent = Math.max(0, clipEnd - clipStart - 0.05);
+            const availableNext = Math.max(0, nextEnd - nextStart - 0.05);
+            const overlapSeconds = Math.min(mergeTransitionDuration, availableCurrent, availableNext);
+
+            if (overlapSeconds > 0.05) {
+              transitionProbe.currentTime = nextStart;
+              await waitFor(transitionProbe, "seeked", 2000);
+
+              const transitionFrames = Math.max(1, Math.round(30 * overlapSeconds));
+              for (let frame = 0; frame < transitionFrames; frame += 1) {
+                const t = (frame + 1) / transitionFrames;
+                const currentTimeForFrame = Math.max(clipStart, clipEnd - overlapSeconds + overlapSeconds * t);
+                const nextTimeForFrame = Math.min(nextEnd, nextStart + overlapSeconds * t);
+
+                // Seek both clips so each transition frame uses the expected video moments.
+                v.currentTime = currentTimeForFrame;
+                transitionProbe.currentTime = nextTimeForFrame;
+                await Promise.all([
+                  waitFor(v, "seeked", 1500).catch(() => {}),
+                  waitFor(transitionProbe, "seeked", 1500).catch(() => {}),
+                ]);
+
+                if (mergeTransition === "crossfade") {
+                  drawFrame(ctx, canvas, clip, v, currentTimeForFrame, { clear: true, alpha: 1 - t });
+                  drawFrame(ctx, canvas, nextClip, transitionProbe, nextTimeForFrame, { clear: false, alpha: t });
+                } else if (mergeTransition === "dip-to-black") {
+                  if (t < 0.5) {
+                    const phase = t / 0.5;
+                    drawFrame(ctx, canvas, clip, v, currentTimeForFrame, { clear: true, alpha: 1 - phase });
+                    ctx.fillStyle = `rgba(0,0,0,${phase})`;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  } else {
+                    const phase = (t - 0.5) / 0.5;
+                    drawFrame(ctx, canvas, nextClip, transitionProbe, nextTimeForFrame, { clear: true, alpha: phase });
+                    ctx.fillStyle = `rgba(0,0,0,${1 - phase})`;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  }
+                } else if (mergeTransition === "slide-left") {
+                  drawFrame(ctx, canvas, clip, v, currentTimeForFrame, { clear: true, offsetX: -canvas.width * t });
+                  drawFrame(ctx, canvas, nextClip, transitionProbe, nextTimeForFrame, { clear: false, offsetX: canvas.width * (1 - t) });
+                } else if (mergeTransition === "wipe-right") {
+                  drawFrame(ctx, canvas, clip, v, currentTimeForFrame, { clear: true });
+                  drawFrame(ctx, canvas, nextClip, transitionProbe, nextTimeForFrame, {
+                    clear: false,
+                    clipRect: { x: 0, width: canvas.width * t },
+                  });
+                }
+
+                await new Promise<void>((resolve) => setTimeout(resolve, 16));
+              }
+
+              didApplyTransition = true;
+              nextClipStartOffsetSeconds = overlapSeconds;
+            }
+          } catch {
+            nextClipStartOffsetSeconds = 0;
+          }
         }
 
         v.pause();
@@ -1290,7 +1624,9 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
             // Keep best effort final frame.
           }
         }
-        drawFrame(ctx, canvas, clip, v, Math.min(v.currentTime, clipEnd));
+        if (!didApplyTransition) {
+          drawFrame(ctx, canvas, clip, v, Math.min(v.currentTime, clipEnd));
+        }
         setExportProgress(Math.round(((i + 1) / exportableClips.length) * 100));
       }
 
@@ -1487,23 +1823,28 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
                 )}
 
                 {/* Text overlays */}
-                {activeOverlays.map(o => (
+                {activeOverlays.map(o => {
+                  const animationState = getTextAnimationState(o, currentTime);
+                  return (
                   <div
                     key={o.id}
                     onMouseDown={(e) => startOverlayDrag(e, o.id)}
                     className={`absolute px-2 py-1 rounded select-none pointer-events-auto cursor-move ${editingOverlayId === o.id ? "ring-1 ring-indigo-400" : ""}`}
                     style={{
-                      left: `${o.x}%`, top: `${o.y}%`, transform: "translate(-50%,-50%)",
+                      left: `${o.x}%`, top: `${o.y}%`,
+                      transform: `translate(-50%,-50%) translate(${animationState.translateX}px, ${animationState.translateY}px) scale(${animationState.scale})`,
                       fontSize: o.fontSize, color: o.color,
                       backgroundColor: o.bgColor === "transparent" ? "rgba(0,0,0,0)" : o.bgColor,
                       fontFamily: o.fontFamily,
                       fontWeight: o.bold ? "bold" : "normal",
                       fontStyle: o.italic ? "italic" : "normal",
+                      opacity: animationState.opacity,
                       textShadow: "0 1px 4px rgba(0,0,0,0.8)",
                     }}>
                     {o.text}
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Play overlay */}
                 {!isYouTubeClip && !isPlaying && (
@@ -1845,6 +2186,7 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
             <PanelBtn id="adjust"    icon={<Sliders size={12}/>}         label="Adjust"/>
             <PanelBtn id="transform" icon={<FlipHorizontal size={12}/>}  label="Transform"/>
             <PanelBtn id="text"      icon={<Type size={12}/>}            label="Text"/>
+            <PanelBtn id="animation" icon={<Sparkles size={12}/>}        label="Animation"/>
             <PanelBtn id="audio"     icon={<Music size={12}/>}           label="Audio"/>
             <PanelBtn id="speed"     icon={<FastForward size={12}/>}     label="Speed"/>
             <PanelBtn id="crop"      icon={<Scissors size={12}/>}        label="Trim"/>
@@ -1924,13 +2266,48 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
               <Slider label="Opacity" value={sel.opacity} min={0} max={100}
                 onChange={v => updateClip({ opacity: v })}
                 onReset={() => updateClip({ opacity: 100 })} unit="%"/>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-800/50 p-2 space-y-2">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">Merge Effect</p>
+                <select
+                  value={mergeTransition}
+                  onChange={(e) => setMergeTransition(e.target.value as (typeof MERGE_TRANSITIONS)[number]["value"])}
+                  className="w-full h-7 text-[9px] bg-gray-900 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                >
+                  {MERGE_TRANSITIONS.map((transition) => (
+                    <option key={transition.value} value={transition.value}>{transition.label}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-gray-500 w-14">Duration</span>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1.5}
+                    step={0.1}
+                    value={mergeTransitionDuration}
+                    onChange={(e) => setMergeTransitionDuration(Number(e.target.value))}
+                    className="flex-1 h-1 accent-indigo-500"
+                  />
+                  <span className="text-[9px] text-gray-400 w-9 text-right">{mergeTransitionDuration.toFixed(1)}s</span>
+                </div>
+                <p className="text-[8px] text-gray-500">Applies while exporting when one clip joins the next.</p>
+              </div>
             </div>
           )}
 
           {/* ─ FILTER ─ */}
           {activePanel === "filter" && (
             <div className="space-y-3">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Filter Presets</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Filter Presets</p>
+                <button
+                  onClick={applySelectedEffectsToAllClips}
+                  className="text-[8px] rounded bg-indigo-600/20 px-1.5 py-0.5 text-indigo-300 hover:bg-indigo-600/30"
+                >
+                  Apply To All
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {FILTER_PRESETS.map(f => (
                   <button key={f.name} onClick={() => updateClip({ brightness:f.brightness, contrast:f.contrast, saturation:f.saturation, hue:f.hue, sepia:f.sepia, grayscale:f.grayscale })}
@@ -1951,10 +2328,18 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Adjustments</p>
-                <button onClick={() => updateClip({ brightness:100,contrast:100,saturation:100,hue:0,blur:0,sepia:0,grayscale:0,vignette:0,temperature:0,sharpness:0 })}
-                  className="flex items-center gap-1 text-[9px] text-gray-500 hover:text-gray-300 transition">
-                  <RotateCcw size={9}/> Reset
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={applySelectedEffectsToAllClips}
+                    className="text-[8px] rounded bg-indigo-600/20 px-1.5 py-0.5 text-indigo-300 hover:bg-indigo-600/30"
+                  >
+                    Apply To All
+                  </button>
+                  <button onClick={() => updateClip({ brightness:100,contrast:100,saturation:100,hue:0,blur:0,sepia:0,grayscale:0,vignette:0,temperature:0,sharpness:0 })}
+                    className="flex items-center gap-1 text-[9px] text-gray-500 hover:text-gray-300 transition">
+                    <RotateCcw size={9}/> Reset
+                  </button>
+                </div>
               </div>
               <Slider label="Brightness" value={sel.brightness} min={0}   max={200} onChange={v=>updateClip({brightness:v})}  onReset={()=>updateClip({brightness:100})} unit="%"/>
               <Slider label="Contrast"   value={sel.contrast}   min={0}   max={200} onChange={v=>updateClip({contrast:v})}    onReset={()=>updateClip({contrast:100})}   unit="%"/>
@@ -1970,7 +2355,15 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
           {/* ─ TRANSFORM ─ */}
           {activePanel === "transform" && (
             <div className="space-y-3">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Transform</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Transform</p>
+                <button
+                  onClick={applySelectedEffectsToAllClips}
+                  className="text-[8px] rounded bg-indigo-600/20 px-1.5 py-0.5 text-indigo-300 hover:bg-indigo-600/30"
+                >
+                  Apply To All
+                </button>
+              </div>
 
               {/* Flip */}
               <div>
@@ -2035,6 +2428,26 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
                   <input type="number" value={overlayFontSize} onChange={e => setOverlayFontSize(Number(e.target.value))}
                     className="h-6 text-[9px] bg-gray-800 border border-gray-700 text-white rounded px-1 focus:outline-none"
                     placeholder="Size" min={8} max={120}/>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  <select
+                    value={overlayAnimation}
+                    onChange={(e) => setOverlayAnimation(e.target.value as TextOverlay["animation"])}
+                    className="h-6 text-[9px] bg-gray-800 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                  >
+                    {TEXT_ANIMATIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    value={overlayAnimationDuration}
+                    onChange={(e) => setOverlayAnimationDuration(Number(e.target.value))}
+                    className="h-6 text-[9px] bg-gray-800 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                    placeholder="Anim sec"
+                    min={0.1}
+                    max={2}
+                    step={0.1}
+                  />
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -2115,12 +2528,105 @@ export default function VideoView({ databaseId }: { databaseId: string }) {
                               <input type="number" value={o.fontSize} onChange={e => updateOverlay(o.id, { fontSize: Number(e.target.value) })}
                                 className="flex-1 bg-gray-700 text-white text-[9px] rounded px-1 py-0.5 focus:outline-none" placeholder="Size"/>
                             </div>
+                            <div className="flex gap-1">
+                              <select
+                                value={o.animation || "none"}
+                                onChange={(e) => updateOverlay(o.id, { animation: e.target.value as TextOverlay["animation"] })}
+                                className="flex-1 bg-gray-700 text-white text-[9px] rounded px-1 py-0.5 focus:outline-none"
+                              >
+                                {TEXT_ANIMATIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                              </select>
+                              <input
+                                type="number"
+                                value={o.animationDuration ?? DEFAULT_TEXT_ANIMATION_DURATION}
+                                onChange={e => updateOverlay(o.id, { animationDuration: Number(e.target.value) })}
+                                className="w-16 bg-gray-700 text-white text-[9px] rounded px-1 py-0.5 focus:outline-none"
+                                min={0.1}
+                                max={2}
+                                step={0.1}
+                                placeholder="sec"
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ─ ANIMATION ─ */}
+          {activePanel === "animation" && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Animation</p>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-800/60 p-2.5 space-y-2">
+                <p className="text-[9px] text-gray-400">Default text animation</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <select
+                    value={overlayAnimation}
+                    onChange={(e) => setOverlayAnimation(e.target.value as TextOverlay["animation"])}
+                    className="h-7 text-[9px] bg-gray-900 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                  >
+                    {TEXT_ANIMATIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    value={overlayAnimationDuration}
+                    onChange={(e) => setOverlayAnimationDuration(Number(e.target.value))}
+                    className="h-7 text-[9px] bg-gray-900 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                    min={0.1}
+                    max={2}
+                    step={0.1}
+                    placeholder="sec"
+                  />
+                </div>
+                <p className="text-[8px] text-gray-500">Used when adding new text overlays.</p>
+              </div>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-2.5 space-y-2">
+                <p className="text-[9px] text-gray-400">Apply animation quickly</p>
+                <button
+                  onClick={applyAnimationToAllTextLayersInClip}
+                  className="w-full rounded-lg bg-indigo-600/20 py-1.5 text-[10px] font-medium text-indigo-300 hover:bg-indigo-600/30"
+                >
+                  Apply to all text in this clip
+                </button>
+                <button
+                  onClick={applyAnimationToAllTextLayersInProject}
+                  className="w-full rounded-lg bg-cyan-600/20 py-1.5 text-[10px] font-medium text-cyan-300 hover:bg-cyan-600/30"
+                >
+                  Apply to all text in all clips
+                </button>
+              </div>
+
+              {selectedOverlay ? (
+                <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-2.5 space-y-2">
+                  <p className="text-[9px] text-gray-400">Selected text layer</p>
+                  <p className="truncate text-[9px] text-white">{selectedOverlay.text || "Text layer"}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <select
+                      value={selectedOverlay.animation || "none"}
+                      onChange={(e) => updateOverlay(selectedOverlay.id, { animation: e.target.value as TextOverlay["animation"] })}
+                      className="h-7 text-[9px] bg-gray-900 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                    >
+                      {TEXT_ANIMATIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      value={selectedOverlay.animationDuration ?? DEFAULT_TEXT_ANIMATION_DURATION}
+                      onChange={(e) => updateOverlay(selectedOverlay.id, { animationDuration: Number(e.target.value) })}
+                      className="h-7 text-[9px] bg-gray-900 border border-gray-700 text-white rounded px-1 focus:outline-none"
+                      min={0.1}
+                      max={2}
+                      step={0.1}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[9px] text-gray-500">Select a text layer in preview or text list to edit its animation here.</p>
               )}
             </div>
           )}

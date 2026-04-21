@@ -92,7 +92,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: permissionCheck.reason }, { status: permissionCheck.status });
     }
     const db = await Database.findById(id).select("videoData");
-    return NextResponse.json({ clips: db?.videoData ?? null });
+    const videoData = db?.videoData;
+
+    // Backward compatible: older rows stored videoData as clips array only.
+    if (Array.isArray(videoData) || videoData == null) {
+      return NextResponse.json({ clips: videoData ?? null, settings: {} });
+    }
+
+    return NextResponse.json({
+      clips: Array.isArray(videoData.clips) ? videoData.clips : null,
+      settings: typeof videoData.settings === "object" && videoData.settings ? videoData.settings : {},
+    });
   } catch (err: any) {
     console.error("[API] video GET error:", err);
     return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 });
@@ -109,7 +119,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: permissionCheck.reason }, { status: permissionCheck.status });
     }
     const body = await req.json();
-    await Database.findByIdAndUpdate(id, { $set: { videoData: body.clips, updatedAt: new Date() } }, { upsert: true, new: true });
+    const clips = Array.isArray(body?.clips) ? body.clips : [];
+    const settings = typeof body?.settings === "object" && body.settings ? body.settings : {};
+
+    await Database.findByIdAndUpdate(
+      id,
+      { $set: { videoData: { clips, settings }, updatedAt: new Date() } },
+      { upsert: true, new: true }
+    );
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error("[API] video POST error:", err);
