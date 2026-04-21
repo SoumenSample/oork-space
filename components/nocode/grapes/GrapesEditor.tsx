@@ -136,6 +136,7 @@ type PropertySyncResult = {
   failedProperties: string[];
   totalCandidates: number;
 };
+type ManualCodeEditorMode = "selected" | "page";
 
 const FORM_FIELD_TYPES_WITH_OPTIONS = new Set<FormFieldType>(["select", "radio"]);
 const FORM_FIELD_TYPES_WITH_PLACEHOLDER = new Set<FormFieldType>([
@@ -632,6 +633,159 @@ function isTextEditableTag(tagName: unknown): boolean {
   return TEXT_EDITABLE_TAGS.has(String(tagName || "").toLowerCase());
 }
 
+function getComponentDisplayName(component: any): string {
+  const named = String(component?.getName?.({ noCustom: true }) || "").trim();
+  if (named) return named;
+
+  const tag = String(component?.get?.("tagName") || "").trim().toLowerCase();
+  const attrs = (component?.getAttributes?.() || {}) as Record<string, unknown>;
+  const id = String(attrs.id || "").trim();
+  const className = String(attrs.class || attrs.className || "")
+    .split(/\s+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)[0] || "";
+
+  const suffix = [id ? `#${id}` : "", className ? `.${className}` : ""].filter(Boolean).join("");
+  return `${tag || "element"}${suffix}`;
+}
+
+function formatHtmlForEditor(value: string): string {
+  const compact = value
+    .replace(/\r\n?/g, "\n")
+    .replace(/>\s+</g, "><")
+    .trim();
+
+  if (!compact) return "";
+
+  const withLineBreaks = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3");
+  const lines = withLineBreaks
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const voidTags = new Set([
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+  ]);
+
+  let indent = 0;
+  const formatted = lines.map((line) => {
+    const isClosing = /^<\//.test(line);
+    const isComment = /^<!--/.test(line);
+    const isDoctype = /^<!doctype/i.test(line);
+    const tagMatch = line.match(/^<\/?\s*([a-zA-Z0-9-:]+)/);
+    const tagName = tagMatch?.[1]?.toLowerCase() || "";
+    const isSelfClosing = /\/>$/.test(line) || (Boolean(tagName) && voidTags.has(tagName));
+    const isOpening = /^<[^!/]/.test(line) && !isClosing;
+
+    if (isClosing) {
+      indent = Math.max(indent - 1, 0);
+    }
+
+    const prefix = "  ".repeat(indent);
+    const nextLine = `${prefix}${line}`;
+
+    if (isOpening && !isSelfClosing && !isComment && !isDoctype) {
+      indent += 1;
+    }
+
+    return nextLine;
+  });
+
+  return formatted.join("\n");
+}
+
+function formatCssForEditor(value: string): string {
+  const compact = value
+    .replace(/\r\n?/g, "\n")
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/\s+/g, " ").trim())
+    .replace(/\s+/g, " ")
+    .replace(/\s*([{}:;,])\s*/g, "$1")
+    .trim();
+
+  if (!compact) return "";
+
+  const withLineBreaks = compact
+    .replace(/\{/g, " {\n")
+    .replace(/;/g, ";\n")
+    .replace(/\}/g, "}\n");
+
+  const lines = withLineBreaks
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let indent = 0;
+  const formatted = lines.map((line) => {
+    const closes = line.startsWith("}");
+    if (closes) indent = Math.max(indent - 1, 0);
+
+    const next = `${"  ".repeat(indent)}${line}`;
+
+    if (line.endsWith("{")) {
+      indent += 1;
+    }
+
+    return next;
+  });
+
+  return formatted.join("\n");
+}
+
+function formatJsForEditor(value: string): string {
+  const compact = value
+    .replace(/\r\n?/g, "\n")
+    .replace(/\s+/g, " ")
+    .replace(/\s*([{}();,])\s*/g, "$1")
+    .trim();
+
+  if (!compact) return "";
+
+  const withLineBreaks = compact
+    .replace(/\{/g, "{\n")
+    .replace(/\}/g, "\n}\n")
+    .replace(/;/g, ";\n");
+
+  const lines = withLineBreaks
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let indent = 0;
+  const formatted = lines.map((line) => {
+    if (line.startsWith("}")) {
+      indent = Math.max(indent - 1, 0);
+    }
+
+    const next = `${"  ".repeat(indent)}${line}`;
+
+    if (line.endsWith("{")) {
+      indent += 1;
+    }
+
+    return next;
+  });
+
+  return formatted.join("\n");
+}
+
+function getSelectedComponentHtml(component: any): string {
+  const html = String(component?.toHTML?.() || "");
+  return formatHtmlForEditor(html);
+}
+
 export default function GrapesEditor({
   pageId,
   pageUpdatedAt,
@@ -707,6 +861,19 @@ export default function GrapesEditor({
   const [showFloatingInspector, setShowFloatingInspector] = useState(false);
   const [floatingInspectorTab, setFloatingInspectorTab] = useState<"properties" | "styles">("properties");
   const [floatingInspectorPosition, setFloatingInspectorPosition] = useState<{ x: number; y: number } | null>(null);
+  const [showCodeSidebar, setShowCodeSidebar] = useState(false);
+  const [codeSidebarTab, setCodeSidebarTab] = useState<ManualCodeEditorMode>("selected");
+  const [pageCodeTab, setPageCodeTab] = useState<"html" | "css" | "js">("html");
+  const [selectedCodeTab, setSelectedCodeTab] = useState<"html" | "css" | "js">("html");
+  const [selectedCodeHtml, setSelectedCodeHtml] = useState("");
+  const [selectedCodeCss, setSelectedCodeCss] = useState("");
+  const [selectedCodeJs, setSelectedCodeJs] = useState("");
+  const [selectedCodeLabel, setSelectedCodeLabel] = useState("Selected element");
+  const [selectedCodeError, setSelectedCodeError] = useState("");
+  const [pageCodeHtml, setPageCodeHtml] = useState("");
+  const [pageCodeCss, setPageCodeCss] = useState("");
+  const [pageCodeJs, setPageCodeJs] = useState("");
+  const [pageCodeError, setPageCodeError] = useState("");
   const [formFields, setFormFields] = useState<FormField[]>([
     {
       id: `field-${Date.now()}`,
@@ -777,6 +944,100 @@ export default function GrapesEditor({
     setHistoryDepth(Array.isArray(stack) ? stack.length : 0);
   }, []);
 
+  const refreshSelectedCodeDraft = useCallback(() => {
+    const editor = editorRef.current;
+    const component = editor?.getSelected?.();
+    if (!editor || !component) {
+      setSelectedCodeLabel("Selected element");
+      setSelectedCodeHtml("");
+      setSelectedCodeCss("");
+      setSelectedCodeJs("");
+      setSelectedCodeError("Select an element first.");
+      return false;
+    }
+
+    setSelectedCodeLabel(getComponentDisplayName(component));
+    setSelectedCodeHtml(getSelectedComponentHtml(component));
+    setSelectedCodeCss(formatCssForEditor(String(editor.getCss?.({ component }) || "")));
+    setSelectedCodeJs(formatJsForEditor(String(component.get?.("script") || "")));
+    setSelectedCodeError("");
+    return true;
+  }, []);
+
+  const refreshPageCodeDraft = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    setPageCodeHtml(formatHtmlForEditor(editor.getHtml() || ""));
+    setPageCodeCss(formatCssForEditor(editor.getCss() || ""));
+    setPageCodeJs(formatJsForEditor(String(editor.getJs?.() || pageCodeJs || "")));
+    setPageCodeError("");
+  }, [pageCodeJs]);
+
+  const handleFormattedPaste = useCallback((
+    event: any,
+    currentValue: string,
+    setValue: (next: string) => void,
+    formatter: (value: string) => string,
+  ) => {
+    const raw = event.clipboardData.getData("text");
+    if (!raw) return;
+
+    event.preventDefault();
+    const target = event.currentTarget;
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? start;
+    const formatted = formatter(raw);
+    const nextValue = `${currentValue.slice(0, start)}${formatted}${currentValue.slice(end)}`;
+    setValue(nextValue);
+
+    const nextCursor = start + formatted.length;
+    requestAnimationFrame(() => {
+      target.selectionStart = nextCursor;
+      target.selectionEnd = nextCursor;
+    });
+  }, []);
+
+  const applySelectedCodeDraft = useCallback(() => {
+    const editor = editorRef.current;
+    const component = editor?.getSelected?.();
+    if (!editor || !component) {
+      setSelectedCodeError("Select an element first.");
+      return;
+    }
+
+    const nextHtml = selectedCodeHtml.trim();
+    if (!nextHtml) {
+      setSelectedCodeError("HTML cannot be empty.");
+      return;
+    }
+
+    try {
+      const replaced = component.replaceWith(nextHtml);
+      const nextComponent = Array.isArray(replaced) ? replaced[0] : replaced;
+      if (nextComponent) {
+        if (selectedCodeJs.trim()) {
+          nextComponent.set?.("script", selectedCodeJs.trim());
+        }
+        editor.select(nextComponent);
+      }
+      if (selectedCodeCss.trim()) {
+        editor.addStyle(selectedCodeCss);
+      }
+      setSelectedCodeError("");
+      setStatus("Selected element code updated");
+    } catch {
+      setSelectedCodeError("Unable to apply the code changes.");
+    }
+  }, [selectedCodeCss, selectedCodeHtml, selectedCodeJs]);
+
+  const openPageCodeEditor = useCallback(() => {
+    refreshPageCodeDraft();
+    setPageCodeTab("html");
+    setCodeSidebarTab("page");
+    setShowCodeSidebar(true);
+  }, [refreshPageCodeDraft]);
+
   const persistLocalSnapshot = useCallback(() => {
     const editor = editorRef.current;
     if (!editor || !localDraftKey) return;
@@ -786,7 +1047,7 @@ export default function GrapesEditor({
         grapesProjectData: editor.getProjectData(),
         html: editor.getHtml(),
         css: editor.getCss() || "",
-        js: editor.getJs() || "",
+        js: [editor.getJs?.() || "", pageCodeJs.trim()].filter(Boolean).join("\n\n"),
         seo,
         savedAt: Date.now(),
       };
@@ -794,7 +1055,7 @@ export default function GrapesEditor({
     } catch {
       // Ignore local backup failures.
     }
-  }, [localDraftKey, seo]);
+  }, [localDraftKey, pageCodeJs, seo]);
 
   const forceCanvasFill = useCallback(() => {
     const root = rootRef.current;
@@ -889,6 +1150,27 @@ export default function GrapesEditor({
     `;
   }, []);
 
+  const applyPageCodeEditor = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const nextHtml = pageCodeHtml.trim();
+    if (!nextHtml) {
+      setPageCodeError("HTML cannot be empty.");
+      return;
+    }
+
+    try {
+      editor.setComponents(nextHtml);
+      editor.setStyle(pageCodeCss || "");
+      setPageCodeError("");
+      setStatus("Page code updated");
+      forceCanvasFill();
+    } catch {
+      setPageCodeError("Unable to apply the page code.");
+    }
+  }, [forceCanvasFill, pageCodeCss, pageCodeHtml]);
+
   const runSave = useCallback(async () => {
     const editor = editorRef.current;
     if (!editor || savingRef.current) return;
@@ -901,7 +1183,7 @@ export default function GrapesEditor({
         grapesProjectData: editor.getProjectData(),
         html: editor.getHtml(),
         css: editor.getCss() || "",
-        js: editor.getJs() || "",
+        js: [editor.getJs?.() || "", pageCodeJs.trim()].filter(Boolean).join("\n\n"),
         seo,
         savedAt: Date.now(),
       };
@@ -929,7 +1211,7 @@ export default function GrapesEditor({
     } finally {
       savingRef.current = false;
     }
-  }, [localDraftKey, onSave, seo]);
+  }, [localDraftKey, onSave, pageCodeJs, seo]);
 
   const loadSavedSnippets = useCallback(() => {
     if (!snippetsKey) return;
@@ -2128,6 +2410,12 @@ export default function GrapesEditor({
         ]);
       }
 
+      setSelectedCodeLabel(getComponentDisplayName(component));
+      setSelectedCodeHtml(getSelectedComponentHtml(component));
+      setSelectedCodeCss(formatCssForEditor(String(editor.getCss?.({ component }) || "")));
+      setSelectedCodeJs(formatJsForEditor(String(component.get?.("script") || "")));
+      setSelectedCodeError("");
+
       syncWorkflowKeyFromSelectedBinding();
     });
 
@@ -2407,6 +2695,14 @@ export default function GrapesEditor({
     const localCss = typeof localSnapshot?.css === "string" && localSnapshot.css.trim()
       ? String(localSnapshot.css)
       : "";
+
+    const localJs = typeof localSnapshot?.js === "string" && localSnapshot.js.trim()
+      ? String(localSnapshot.js)
+      : "";
+
+    if (localJs) {
+      setPageCodeJs(localJs);
+    }
 
     const serverCss = typeof initialCss === "string" && initialCss.trim()
       ? initialCss
@@ -2755,6 +3051,16 @@ export default function GrapesEditor({
           </button>
           <button className="nocode-btn nocode-btn-secondary" onClick={() => setShowFormBuilder((v) => !v)} title="Build and insert custom forms visually">
             Form Builder
+          </button>
+          <button className="nocode-btn nocode-btn-secondary" onClick={openPageCodeEditor} title="Open the docked code sidebar">
+            Code Sidebar
+          </button>
+          <button
+            className="nocode-btn nocode-btn-secondary"
+            onClick={() => setIsRightSidebarCollapsed((value) => !value)}
+            title={isRightSidebarCollapsed ? "Show page sidebar" : "Hide page sidebar"}
+          >
+            {isRightSidebarCollapsed ? "Show Page Sidebar" : "Hide Page Sidebar"}
           </button>
           <button
             className="nocode-btn nocode-btn-secondary"
@@ -3135,7 +3441,7 @@ export default function GrapesEditor({
         </div>
       ) : null}
 
-      <div className={`nocode-builder-grid ${isRightSidebarCollapsed ? "right-collapsed" : ""}`}>
+      <div className={`nocode-builder-grid ${isRightSidebarCollapsed ? "right-collapsed" : ""} ${showCodeSidebar ? "code-open" : ""}`}>
         <aside className="nocode-panel nocode-panel-left">
           <div className="nocode-left-tabs" role="tablist" aria-label="Builder panel mode">
             <button
@@ -3547,17 +3853,18 @@ export default function GrapesEditor({
         </div>
 
         <aside className={`nocode-panel nocode-panel-right ${isRightSidebarCollapsed ? "collapsed" : ""}`}>
-          <button
-            className="nocode-right-collapse-btn"
-            onClick={() => setIsRightSidebarCollapsed((v) => !v)}
-            aria-label={isRightSidebarCollapsed ? "Expand side panel" : "Collapse side panel"}
-            title={isRightSidebarCollapsed ? "Expand" : "Collapse"}
-          >
-            {isRightSidebarCollapsed ? "<" : ">"}
-          </button>
-
           <div className="nocode-right-content">
-            <h3>Page Linking</h3>
+            <div className="nocode-right-head">
+              <h3>Page Linking</h3>
+              <button
+                className="nocode-btn nocode-btn-secondary"
+                type="button"
+                onClick={() => setIsRightSidebarCollapsed(true)}
+                title="Hide page sidebar"
+              >
+                Hide
+              </button>
+            </div>
             <div className="nocode-pane-scroll">
               <select className="nocode-full-width" value={selectedPageSlug} onChange={(e) => setSelectedPageSlug(e.target.value)}>
                 <option value="">Select page</option>
@@ -3659,6 +3966,207 @@ export default function GrapesEditor({
             </div>
           </div>
         </aside>
+
+        {showCodeSidebar ? (
+          <aside className="nocode-panel nocode-panel-code">
+            <div className="nocode-code-sidebar-head">
+              <div className="nocode-code-sidebar-tabs">
+                <button
+                  className={`nocode-floating-tab ${codeSidebarTab === "selected" ? "active" : ""}`}
+                  onClick={() => {
+                    setCodeSidebarTab("selected");
+                    refreshSelectedCodeDraft();
+                  }}
+                  type="button"
+                >
+                  Selected
+                </button>
+                <button
+                  className={`nocode-floating-tab ${codeSidebarTab === "page" ? "active" : ""}`}
+                  onClick={() => {
+                    setCodeSidebarTab("page");
+                    openPageCodeEditor();
+                  }}
+                  type="button"
+                >
+                  Page
+                </button>
+              </div>
+                <button
+                  className="nocode-code-close-btn"
+                  onClick={() => setShowCodeSidebar(false)}
+                  aria-label="Hide code sidebar"
+                  title="Hide"
+                  type="button"
+                >
+                  x
+                </button>
+            </div>
+
+            <div className="nocode-code-sidebar-body">
+              {codeSidebarTab === "selected" ? (
+                <div className="nocode-code-pane">
+                  <div className="nocode-code-pane-head">
+                    <div>
+                      <h4>Selected Element</h4>
+                      <p>Add custom HTML, CSS, and JS for the selected element.</p>
+                    </div>
+                    <div className="nocode-code-actions">
+                      <button className="nocode-btn nocode-btn-secondary" type="button" onClick={refreshSelectedCodeDraft}>
+                        Refresh
+                      </button>
+                      <button
+                        className="nocode-btn nocode-btn-secondary"
+                        type="button"
+                        onClick={() => {
+                          if (selectedCodeTab === "html") setSelectedCodeHtml((prev) => formatHtmlForEditor(prev));
+                          if (selectedCodeTab === "css") setSelectedCodeCss((prev) => formatCssForEditor(prev));
+                          if (selectedCodeTab === "js") setSelectedCodeJs((prev) => formatJsForEditor(prev));
+                        }}
+                      >
+                        Format
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="nocode-code-mode-tabs">
+                    <button className={`nocode-floating-tab ${selectedCodeTab === "html" ? "active" : ""}`} type="button" onClick={() => setSelectedCodeTab("html")}>HTML</button>
+                    <button className={`nocode-floating-tab ${selectedCodeTab === "css" ? "active" : ""}`} type="button" onClick={() => setSelectedCodeTab("css")}>CSS</button>
+                    <button className={`nocode-floating-tab ${selectedCodeTab === "js" ? "active" : ""}`} type="button" onClick={() => setSelectedCodeTab("js")}>JS</button>
+                  </div>
+
+                  {selectedCodeTab === "html" ? (
+                    <label className="nocode-code-label">
+                      <span>{selectedCodeLabel}</span>
+                      <textarea
+                        className="nocode-code-textarea nocode-code-textarea-large"
+                        value={selectedCodeHtml}
+                        onChange={(event) => setSelectedCodeHtml(event.target.value)}
+                        onPaste={(event) => handleFormattedPaste(event, selectedCodeHtml, setSelectedCodeHtml, formatHtmlForEditor)}
+                        placeholder="Paste HTML for the selected element here"
+                      />
+                    </label>
+                  ) : null}
+
+                  {selectedCodeTab === "css" ? (
+                    <label className="nocode-code-label">
+                      <span>{selectedCodeLabel} CSS</span>
+                      <textarea
+                        className="nocode-code-textarea nocode-code-textarea-large"
+                        value={selectedCodeCss}
+                        onChange={(event) => setSelectedCodeCss(event.target.value)}
+                        onPaste={(event) => handleFormattedPaste(event, selectedCodeCss, setSelectedCodeCss, formatCssForEditor)}
+                        placeholder="Add custom CSS rules for the selected element"
+                      />
+                    </label>
+                  ) : null}
+
+                  {selectedCodeTab === "js" ? (
+                    <label className="nocode-code-label">
+                      <span>{selectedCodeLabel} JS</span>
+                      <textarea
+                        className="nocode-code-textarea nocode-code-textarea-large"
+                        value={selectedCodeJs}
+                        onChange={(event) => setSelectedCodeJs(event.target.value)}
+                        onPaste={(event) => handleFormattedPaste(event, selectedCodeJs, setSelectedCodeJs, formatJsForEditor)}
+                        placeholder="Add custom JavaScript for the selected element"
+                      />
+                    </label>
+                  ) : null}
+                  {selectedCodeError ? <p className="nocode-code-error">{selectedCodeError}</p> : null}
+                  <div className="nocode-code-actions">
+                    <button className="nocode-btn nocode-btn-secondary" type="button" onClick={refreshSelectedCodeDraft}>
+                      Reset
+                    </button>
+                    <button className="nocode-btn nocode-btn-primary" type="button" onClick={applySelectedCodeDraft}>
+                      Apply HTML
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="nocode-code-pane">
+                  <div className="nocode-code-pane-head">
+                    <div>
+                      <h4>Page Code</h4>
+                      <p>HTML, CSS, and JS for the current page.</p>
+                    </div>
+                    <div className="nocode-code-actions">
+                      <button className="nocode-btn nocode-btn-secondary" type="button" onClick={refreshPageCodeDraft}>
+                        Refresh
+                      </button>
+                      <button
+                        className="nocode-btn nocode-btn-secondary"
+                        type="button"
+                        onClick={() => {
+                          if (pageCodeTab === "html") setPageCodeHtml((prev) => formatHtmlForEditor(prev));
+                          if (pageCodeTab === "css") setPageCodeCss((prev) => formatCssForEditor(prev));
+                          if (pageCodeTab === "js") setPageCodeJs((prev) => formatJsForEditor(prev));
+                        }}
+                      >
+                        Format
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="nocode-code-mode-tabs">
+                    <button className={`nocode-floating-tab ${pageCodeTab === "html" ? "active" : ""}`} type="button" onClick={() => setPageCodeTab("html")}>HTML</button>
+                    <button className={`nocode-floating-tab ${pageCodeTab === "css" ? "active" : ""}`} type="button" onClick={() => setPageCodeTab("css")}>CSS</button>
+                    <button className={`nocode-floating-tab ${pageCodeTab === "js" ? "active" : ""}`} type="button" onClick={() => setPageCodeTab("js")}>JS</button>
+                  </div>
+
+                  {pageCodeTab === "html" ? (
+                    <label className="nocode-code-label">
+                      <span>HTML</span>
+                      <textarea
+                        className="nocode-code-textarea nocode-code-textarea-large"
+                        value={pageCodeHtml}
+                        onChange={(event) => setPageCodeHtml(event.target.value)}
+                        onPaste={(event) => handleFormattedPaste(event, pageCodeHtml, setPageCodeHtml, formatHtmlForEditor)}
+                        placeholder="Paste the full page HTML here"
+                      />
+                    </label>
+                  ) : null}
+
+                  {pageCodeTab === "css" ? (
+                    <label className="nocode-code-label">
+                      <span>CSS</span>
+                      <textarea
+                        className="nocode-code-textarea nocode-code-textarea-large"
+                        value={pageCodeCss}
+                        onChange={(event) => setPageCodeCss(event.target.value)}
+                        onPaste={(event) => handleFormattedPaste(event, pageCodeCss, setPageCodeCss, formatCssForEditor)}
+                        placeholder="Paste the page CSS here"
+                      />
+                    </label>
+                  ) : null}
+
+                  {pageCodeTab === "js" ? (
+                    <label className="nocode-code-label">
+                      <span>JS</span>
+                      <textarea
+                        className="nocode-code-textarea nocode-code-textarea-large"
+                        value={pageCodeJs}
+                        onChange={(event) => setPageCodeJs(event.target.value)}
+                        onPaste={(event) => handleFormattedPaste(event, pageCodeJs, setPageCodeJs, formatJsForEditor)}
+                        placeholder="Paste the page JavaScript here"
+                      />
+                    </label>
+                  ) : null}
+
+                  {pageCodeError ? <p className="nocode-code-error">{pageCodeError}</p> : null}
+                  <div className="nocode-code-actions">
+                    <button className="nocode-btn nocode-btn-secondary" type="button" onClick={() => setShowCodeSidebar(false)}>
+                      Hide
+                    </button>
+                    <button className="nocode-btn nocode-btn-primary" type="button" onClick={applyPageCodeEditor}>
+                      Apply Page Code
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        ) : null}
       </div>
     </div>
   );

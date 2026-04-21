@@ -39,6 +39,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-table": "^8.21.3",
+<<<<<<< HEAD
 
     "@xyflow/react": "^12.10.2",
     "agora-rtc-sdk-ng": "^4.24.3",
@@ -48,6 +49,10 @@
 
     "@xyflow/react": "^12.10.2",
 
+=======
+    "@xyflow/react": "^12.10.2",
+    "agora-rtc-sdk-ng": "^4.24.3",
+>>>>>>> 6fd4f412a2565c0dc0b1cfa4002a95f2160379a4
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.73.3",
     "class-variance-authority": "^0.7.1",

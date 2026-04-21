@@ -101,6 +101,7 @@ function getTriggerLabel(triggerType: string): string {
 function getDefaultConfig(type: string): Record<string, unknown> {
   if (type === "trigger.webhook") return { secret: "" };
   if (type === "trigger.schedule") return { cron: "*/5 * * * *" };
+  if (type === "trigger.formSubmit") return { secret: "", allowedOrigins: "" };
   if (type === "action.webhook") return { url: "" };
   if (type === "action.dbInsert") {
     return {
@@ -156,6 +157,9 @@ export default function WorkflowEditor({
   const [appDefaultDatabaseId, setAppDefaultDatabaseId] = useState("");
   const [isDatabaseOptionsLoading, setIsDatabaseOptionsLoading] = useState(false);
   const [isSettingsPanelCollapsed, setIsSettingsPanelCollapsed] = useState(externalSettingsSidebar);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const selectedNodeId = selectedNodeIds[0] || "";
   const selectedEdgeId = selectedEdgeIds[0] || "";
@@ -607,8 +611,43 @@ export default function WorkflowEditor({
           Add Condition
         </button>
 
-        <button onClick={() => void onSave({ nodes, edges })} className="border p-2 rounded-xl">Save</button>
-        <button onClick={() => void onPublish()} className="border p-2 rounded-xl">Publish</button>
+        <button
+          onClick={async () => {
+            try {
+              setIsSaving(true);
+              setStatusMessage("Saving workflow...");
+              await onSave({ nodes, edges });
+              setStatusMessage(`Saved at ${new Date().toLocaleTimeString()}`);
+            } catch (error) {
+              setStatusMessage(error instanceof Error ? error.message : "Failed to save workflow");
+            } finally {
+              setIsSaving(false);
+            }
+          }}
+          className="border p-2 rounded-xl"
+          disabled={isSaving || isPublishing}
+        >
+          {isSaving ? "Saving..." : "Save"}
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              setIsPublishing(true);
+              setStatusMessage("Publishing workflow...");
+              await onPublish();
+              setStatusMessage(`Published at ${new Date().toLocaleTimeString()}`);
+            } catch (error) {
+              setStatusMessage(error instanceof Error ? error.message : "Failed to publish workflow");
+            } finally {
+              setIsPublishing(false);
+            }
+          }}
+          className="border p-2 rounded-xl"
+          disabled={isSaving || isPublishing}
+        >
+          {isPublishing ? "Publishing..." : "Publish"}
+        </button>
+        {statusMessage ? <span className="text-xs text-muted-foreground">{statusMessage}</span> : null}
         {!externalSettingsSidebar ? (
           <button
             onClick={() => setIsSettingsPanelCollapsed((value) => !value)}
@@ -691,6 +730,27 @@ export default function WorkflowEditor({
                         onChange={(e) => updateNodeConfig(String(selectedNode.id), "cron", e.target.value)}
                         className="w-full rounded border p-2"
                         placeholder="*/5 * * * *"
+                      />
+                    </>
+                  )}
+
+                  {selectedNodeType === "trigger.formSubmit" && (
+                    <>
+                      <label className="block text-xs text-muted-foreground">Trigger secret (optional)</label>
+                      <input
+                        value={String(selectedNode.data?.config?.secret || "")}
+                        onChange={(e) => updateNodeConfig(String(selectedNode.id), "secret", e.target.value)}
+                        className="w-full rounded border p-2"
+                        placeholder="Shared secret required from public page"
+                      />
+
+                      <label className="block text-xs text-muted-foreground">Allowed origins (optional)</label>
+                      <textarea
+                        value={String(selectedNode.data?.config?.allowedOrigins || "")}
+                        onChange={(e) => updateNodeConfig(String(selectedNode.id), "allowedOrigins", e.target.value)}
+                        className="w-full rounded border p-2"
+                        rows={3}
+                        placeholder="https://example.com, https://*.example.com"
                       />
                     </>
                   )}
