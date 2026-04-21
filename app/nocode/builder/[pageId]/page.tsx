@@ -86,7 +86,7 @@ export default function NocodeBuilderPage() {
           initialHtml={page?.draft?.html}
           initialCss={page?.draft?.css}
           initialSeo={page?.draft?.seo}
-          // initialRuntime={page?.draft?.runtime}
+          // initialRuntime={page?.draft?.runtime} removed for now since it's not used in the editor yet
           pageUpdatedAt={page?.updatedAt}
           pageName={page?.name}
           pageSlug={page?.slug}
