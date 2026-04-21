@@ -24,6 +24,10 @@ export default function WorkflowBuilderPage() {
   const [workflow, setWorkflow] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const isEmbed = useMemo(() => {
     const embed = searchParams.get("embed");
     return embed === "1" || embed === "true";
@@ -76,9 +80,6 @@ export default function WorkflowBuilderPage() {
   }
 
   const deleteWorkflow = async () => {
-    const ok = window.confirm("Delete this workflow? This action cannot be undone.");
-    if (!ok) return;
-
     try {
       setIsDeleting(true);
       const res = await fetch(`/api/nocode/workflows/${workflowId}`, { method: "DELETE" });
@@ -86,21 +87,19 @@ export default function WorkflowBuilderPage() {
         throw new Error(`Delete failed (${res.status})`);
       }
       router.push("/nocode/apps");
-    } catch {
-      alert("Failed to delete workflow");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Failed to delete workflow");
     } finally {
       setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
   const renameWorkflow = async () => {
     const currentName = String(workflow?.name || "");
-    const nextNameInput = window.prompt("Enter new workflow name", currentName);
-    if (nextNameInput === null) return;
-
-    const nextName = nextNameInput.trim();
+    const nextName = renameValue.trim();
     if (!nextName) {
-      window.alert("Workflow name cannot be empty.");
+      setActionMessage("Workflow name cannot be empty");
       return;
     }
 
@@ -123,8 +122,10 @@ export default function WorkflowBuilderPage() {
         ...(prev || {}),
         ...(json?.data || {}),
       }));
-    } catch {
-      window.alert("Failed to rename workflow");
+      setActionMessage(`Workflow renamed to ${nextName}`);
+      setShowRenameDialog(false);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Failed to rename workflow");
     } finally {
       setIsRenaming(false);
     }
@@ -144,7 +145,10 @@ export default function WorkflowBuilderPage() {
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => void renameWorkflow()}
+                  onClick={() => {
+                    setRenameValue(String(workflow?.name || ""));
+                    setShowRenameDialog(true);
+                  }}
                   disabled={isRenaming || isDeleting}
                   className="shrink-0"
                 >
@@ -152,7 +156,7 @@ export default function WorkflowBuilderPage() {
                 </Button>
                 <Button
                   variant="destructive"
-                  onClick={() => void deleteWorkflow()}
+                  onClick={() => setShowDeleteConfirm(true)}
                   disabled={isDeleting || isRenaming}
                   className="shrink-0"
                 >
@@ -168,17 +172,71 @@ export default function WorkflowBuilderPage() {
           appId={String(workflow?.appId || "")}
           externalSettingsSidebar={isEmbed && useExternalSidebar}
           onSave={async (draftGraph) => {
-            await fetch(`/api/nocode/workflows/${workflowId}`, {
+            const response = await fetch(`/api/nocode/workflows/${workflowId}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ draftGraph }),
             });
+
+            if (!response.ok) {
+              throw new Error(`Failed to save workflow (${response.status})`);
+            }
           }}
           onPublish={async () => {
-            await fetch(`/api/nocode/workflows/${workflowId}/publish`, { method: "POST" });
-            alert("Workflow published");
+            const response = await fetch(`/api/nocode/workflows/${workflowId}/publish`, { method: "POST" });
+            if (!response.ok) {
+              throw new Error(`Failed to publish workflow (${response.status})`);
+            }
           }}
         />
+
+        {actionMessage ? (
+          <p className="mt-3 rounded border border-border/70 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            {actionMessage}
+          </p>
+        ) : null}
+
+        {showRenameDialog ? (
+          <Card className="mt-3 border-border/70 py-0">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Rename Workflow</CardTitle>
+              <CardDescription>Give this workflow a clear business-friendly name.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <input
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Workflow name"
+              />
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowRenameDialog(false)} disabled={isRenaming}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void renameWorkflow()} disabled={isRenaming}>
+                  {isRenaming ? "Renaming..." : "Save Name"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {showDeleteConfirm ? (
+          <Card className="mt-3 border-destructive/40 py-0">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Delete Workflow?</CardTitle>
+              <CardDescription>This action cannot be undone.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={() => void deleteWorkflow()} disabled={isDeleting}>
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
       </section>
     </div>
   );

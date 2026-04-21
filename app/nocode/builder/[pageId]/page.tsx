@@ -86,6 +86,7 @@ export default function NocodeBuilderPage() {
           initialHtml={page?.draft?.html}
           initialCss={page?.draft?.css}
           initialSeo={page?.draft?.seo}
+          initialRuntime={page?.draft?.runtime}
           pageUpdatedAt={page?.updatedAt}
           pageName={page?.name}
           pageSlug={page?.slug}
@@ -116,7 +117,6 @@ export default function NocodeBuilderPage() {
             if (!json?.success) {
               throw new Error("Failed to publish page");
             }
-            alert("Published");
           }}
         />
       </section>
